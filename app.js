@@ -700,10 +700,16 @@
     // clear today
     $('#clearTodayBtn').addEventListener('click', () => {
       if (!confirm(t('confirmClear'))) return;
-      State.logs[today] = [];
-      saveJSON(LS_KEYS.logs, State.logs);
-      gtmEvent('clear_today');
-      renderIndex();
+      try {
+        const newLogs = { ...State.logs, [today]: [] };
+        saveJSON(LS_KEYS.logs, newLogs);  // 先保存，失败会抛异常
+        State.logs = newLogs;  // 保存成功后更新内存
+        gtmEvent('clear_today');
+        renderIndex();
+      } catch (err) {
+        console.error('Clear error:', err);
+        showToast(currentLang === 'zh' ? '清空失败，请重试' : 'Clear failed, please retry');
+      }
     });
 
     // file inputs
@@ -758,12 +764,14 @@
           updated.mealType = mealType;
           updated.summary = sumMealItems(updated.items);
 
-          const arr = State.logs[day] || [];
+          const arr = [...(State.logs[day] || [])];
           const idx = arr.findIndex(x => x.id === State.editingMealId);
+          let newLogs;
           if (idx >= 0) {
             arr[idx] = updated;
-            State.logs[day] = arr;
-            saveJSON(LS_KEYS.logs, State.logs);
+            newLogs = { ...State.logs, [day]: arr };
+            saveJSON(LS_KEYS.logs, newLogs);  // 先保存，失败会抛异常
+            State.logs = newLogs;  // 保存成功后更新内存
             gtmEvent('save_meal', { meal_type: mealType, action: 'edit' });
             showToast(currentLang === 'zh' ? '已更新记录' : 'Record updated');
           } else {
@@ -771,8 +779,9 @@
             console.warn('Original meal not found, saving as new');
             updated.id = cryptoRandomId();
             arr.unshift(updated);
-            State.logs[day] = arr;
-            saveJSON(LS_KEYS.logs, State.logs);
+            newLogs = { ...State.logs, [day]: arr };
+            saveJSON(LS_KEYS.logs, newLogs);  // 先保存，失败会抛异常
+            State.logs = newLogs;  // 保存成功后更新内存
             gtmEvent('save_meal', { meal_type: mealType, action: 'new_from_edit' });
             showToast(currentLang === 'zh' ? '已保存为新记录' : 'Saved as new record');
           }
@@ -1037,14 +1046,19 @@
   function savePendingMeal(mealType) {
     if (!State.pendingMeal) return;
     const day = todayKey();
-    const list = State.logs[day] || [];
     const meal = deepClone(State.pendingMeal);
     meal.mealType = mealType;
     meal.summary = sumMealItems(meal.items);
 
-    list.unshift(meal);
-    State.logs[day] = list;
-    saveJSON(LS_KEYS.logs, State.logs);
+    // 先构建新的 logs 对象，尝试保存到 localStorage
+    const newList = [...(State.logs[day] || [])];
+    newList.unshift(meal);
+    const newLogs = { ...State.logs, [day]: newList };
+
+    saveJSON(LS_KEYS.logs, newLogs);  // 如果失败会抛异常
+
+    // 保存成功，更新内存状态
+    State.logs = newLogs;
     gtmEvent('save_meal', { meal_type: mealType });
 
     setSheetOpen($('#resultSheet'), false);
@@ -1059,7 +1073,6 @@
     }
 
     const day = todayKey();
-    const list = State.logs[day] || [];
     const meal = deepClone(State.pendingMeal);
 
     // IMPORTANT: Always generate a new unique ID for new saves to prevent duplicate ID issues
@@ -1067,11 +1080,16 @@
     meal.mealType = mealType;
     meal.summary = sumMealItems(meal.items);
 
-    list.unshift(meal);
-    State.logs[day] = list;
-    saveJSON(LS_KEYS.logs, State.logs);
-    gtmEvent('save_meal', { meal_type: mealType });
+    // 先构建新的 logs 对象，尝试保存到 localStorage
+    const newList = [...(State.logs[day] || [])];
+    newList.unshift(meal);
+    const newLogs = { ...State.logs, [day]: newList };
 
+    saveJSON(LS_KEYS.logs, newLogs);  // 如果失败会抛异常
+
+    // 保存成功，更新内存状态
+    State.logs = newLogs;
+    gtmEvent('save_meal', { meal_type: mealType });
     State.pendingMeal = null;
 
     // Show success toast
@@ -1091,18 +1109,23 @@
     if (!State.pendingMeal) return;
 
     const day = todayKey();
-    const list = State.logs[day] || [];
     const meal = deepClone(State.pendingMeal);
 
     meal.id = cryptoRandomId();
     meal.mealType = mealType;
     meal.summary = sumMealItems(meal.items);
 
-    list.unshift(meal);
-    State.logs[day] = list;
-    saveJSON(LS_KEYS.logs, State.logs);
-    gtmEvent('save_meal', { meal_type: mealType });
+    // 先构建新的 logs 对象，尝试保存到 localStorage
+    // 只有保存成功后才更新内存状态，避免保存失败但内存已修改的bug
+    const newList = [...(State.logs[day] || [])];
+    newList.unshift(meal);
+    const newLogs = { ...State.logs, [day]: newList };
 
+    saveJSON(LS_KEYS.logs, newLogs);  // 如果失败会抛异常，不会执行下面的代码
+
+    // 保存成功，更新内存状态
+    State.logs = newLogs;
+    gtmEvent('save_meal', { meal_type: mealType });
     State.pendingMeal = null;
   }
 
@@ -1185,12 +1208,13 @@
 
         try {
           // Find and remove only the FIRST matching record (safety measure)
-          const arr = State.logs[day] || [];
+          const arr = [...(State.logs[day] || [])];  // 创建副本
           const idx = arr.findIndex(x => x.id === id);
           if (idx >= 0) {
             arr.splice(idx, 1);
-            State.logs[day] = arr;
-            saveJSON(LS_KEYS.logs, State.logs);
+            const newLogs = { ...State.logs, [day]: arr };
+            saveJSON(LS_KEYS.logs, newLogs);  // 先保存，失败会抛异常
+            State.logs = newLogs;  // 保存成功后更新内存
             gtmEvent('delete_meal');
             showToast(currentLang === 'zh' ? '已删除' : 'Deleted');
           } else {
