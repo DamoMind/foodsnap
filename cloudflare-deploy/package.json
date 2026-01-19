@@ -1,0 +1,20 @@
+{
+  "name": "foodsnap-api",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:create": "wrangler d1 create foodsnap-db",
+    "db:migrate": "wrangler d1 execute foodsnap-db --file=./schema.sql",
+    "db:migrate:local": "wrangler d1 execute foodsnap-db --local --file=./schema.sql"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240117.0",
+    "typescript": "^5.3.3",
+    "wrangler": "^3.22.1"
+  },
+  "dependencies": {
+    "hono": "^3.12.6"
+  }
+}

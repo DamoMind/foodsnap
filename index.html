@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0ea5e9" />
+  <title data-i18n="title">拍照识别饮食 - 今日</title>
+  <link rel="stylesheet" href="./style.css" />
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-4VFTHNYWQ7"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-4VFTHNYWQ7');
+  </script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar__title">
+      <div class="brand">FoodSnap</div>
+      <div class="subtitle" id="todayLabel" data-i18n="today">今日</div>
+    </div>
+    <div class="topbar__actions">
+      <button class="lang-btn" id="langToggle" title="Switch Language">EN</button>
+      <a class="icon-btn" href="./dashboard.html" aria-label="统计">
+        <span class="icon">📊</span>
+      </a>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- 目标/进度 -->
+    <section class="card">
+      <div class="card__header">
+        <h2 class="card__title" data-i18n="todayProgress">今日进度</h2>
+        <button class="text-btn" id="openProfileBtn" data-i18n="goalSettings">目标设置</button>
+      </div>
+
+      <div class="kpi">
+        <div class="kpi__row">
+          <div class="kpi__label" data-i18n="calories">热量</div>
+          <div class="kpi__value"><span id="kcalNow">0</span> / <span id="kcalGoal">2000</span> kcal</div>
+        </div>
+        <div class="progress">
+          <div class="progress__bar" id="kcalBar" style="width:0%"></div>
+        </div>
+
+        <div class="macro-grid">
+          <div class="macro">
+            <div class="macro__head">
+              <span data-i18n="protein">蛋白</span>
+              <span><b id="pNow">0</b>/<span id="pGoal">120</span>g</span>
+            </div>
+            <div class="progress progress--sm"><div class="progress__bar" id="pBar" style="width:0%"></div></div>
+          </div>
+          <div class="macro">
+            <div class="macro__head">
+              <span data-i18n="carbs">碳水</span>
+              <span><b id="cNow">0</b>/<span id="cGoal">220</span>g</span>
+            </div>
+            <div class="progress progress--sm"><div class="progress__bar" id="cBar" style="width:0%"></div></div>
+          </div>
+          <div class="macro">
+            <div class="macro__head">
+              <span data-i18n="fat">脂肪</span>
+              <span><b id="fNow">0</b>/<span id="fGoal">60</span>g</span>
+            </div>
+            <div class="progress progress--sm"><div class="progress__bar" id="fBar" style="width:0%"></div></div>
+          </div>
+        </div>
+
+        <div class="advice" id="adviceCard">
+          <div class="advice__title" data-i18n="advice">建议</div>
+          <div class="advice__text" id="adviceText" data-i18n="setGoalHint">设置目标后，将给出可执行建议。</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 今日记录 -->
+    <section class="card">
+      <div class="card__header">
+        <h2 class="card__title" data-i18n="todayRecords">今日记录</h2>
+        <button class="text-btn danger" id="clearTodayBtn" data-i18n="clearToday">清空今日</button>
+      </div>
+      <div id="todayList" class="meal-list"></div>
+      <div class="empty" id="todayEmpty" hidden data-i18n="noRecords">
+        还没有记录。点击下方"拍照记录"开始。
+      </div>
+    </section>
+  </main>
+
+  <!-- 悬浮拍照按钮 -->
+  <div class="fab-wrap">
+    <button class="fab" id="openCaptureBtn" data-i18n="snapMeal">拍照记录</button>
+  </div>
+
+  <!-- 拍照/上传弹层 -->
+  <div class="sheet" id="captureSheet" aria-hidden="true">
+    <div class="sheet__mask" data-close="1"></div>
+    <div class="sheet__panel">
+      <div class="sheet__title" data-i18n="photoUpload">拍照/上传</div>
+      <div class="sheet__body">
+        <div class="btn-row">
+          <label class="btn btn--primary">
+            <input id="cameraInput" type="file" accept="image/*" capture="environment" hidden />
+            <span data-i18n="openCamera">打开相机</span>
+          </label>
+          <label class="btn">
+            <input id="albumInput" type="file" accept="image/*" hidden />
+            <span data-i18n="fromAlbum">从相册选择</span>
+          </label>
+        </div>
+
+        <div class="hint" data-i18n="compressHint">
+          图片会在本地压缩后再上传识别。
+        </div>
+
+        <div class="preview" id="previewWrap" hidden>
+          <img id="previewImg" alt="预览" />
+          <div class="preview__meta">
+            <div class="seg">
+              <label class="seg__label" data-i18n="mealType">餐次</label>
+              <select id="mealTypeSelect" class="select">
+                <option value="breakfast" data-i18n="breakfast">早餐</option>
+                <option value="lunch" selected data-i18n="lunch">午餐</option>
+                <option value="dinner" data-i18n="dinner">晚餐</option>
+                <option value="snack" data-i18n="snack">加餐</option>
+              </select>
+            </div>
+            <button class="btn btn--primary" id="analyzeBtn" data-i18n="startAnalyze">开始识别</button>
+          </div>
+        </div>
+
+        <div class="loading" id="loadingBox" hidden>
+          <div class="spinner"></div>
+          <div class="loading__text" id="loadingText" data-i18n="analyzing">识别中…</div>
+        </div>
+      </div>
+      <div class="sheet__footer">
+        <button class="btn btn--ghost" data-close="1" data-i18n="close">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 识别结果页（同页弹层） -->
+  <div class="sheet" id="resultSheet" aria-hidden="true">
+    <div class="sheet__mask" data-close="1"></div>
+    <div class="sheet__panel sheet__panel--full">
+      <div class="sheet__title" data-i18n="confirmResult">识别确认</div>
+      <div class="sheet__body">
+        <div class="result-head">
+          <img id="resultImg" class="result-img" alt="结果图片" />
+          <div class="result-sum">
+            <div class="sum-kpi">
+              <div class="sum-kpi__label" data-i18n="mealCalories">本餐热量</div>
+              <div class="sum-kpi__value"><span id="mealKcal">0</span> kcal</div>
+            </div>
+            <div class="sum-macros">
+              <span>P <b id="mealP">0</b>g</span>
+              <span>C <b id="mealC">0</b>g</span>
+              <span>F <b id="mealF">0</b>g</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card card--flat">
+          <div class="card__header">
+            <h3 class="card__title" data-i18n="foodList">食物列表</h3>
+            <button class="text-btn" id="addManualBtn" data-i18n="addManual">手动添加</button>
+          </div>
+          <div id="foodList" class="food-list"></div>
+          <div class="hint" data-i18n="adjustHint">可拖动滑杆调整份量（g），营养会自动更新。</div>
+        </div>
+
+        <div class="card card--flat">
+          <div class="card__header">
+            <h3 class="card__title" data-i18n="saveTo">保存到</h3>
+          </div>
+          <div class="btn-row">
+            <button class="btn" data-meal="breakfast" data-i18n="breakfast">早餐</button>
+            <button class="btn" data-meal="lunch" data-i18n="lunch">午餐</button>
+            <button class="btn" data-meal="dinner" data-i18n="dinner">晚餐</button>
+            <button class="btn" data-meal="snack" data-i18n="snack">加餐</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="sheet__footer">
+        <button class="btn btn--ghost" id="retakeBtn">重拍</button>
+        <button class="btn btn--ghost" data-close="1" data-i18n="back">返回</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 目标设置弹层 -->
+  <div class="sheet" id="profileSheet" aria-hidden="true">
+    <div class="sheet__mask" data-close="1"></div>
+    <div class="sheet__panel">
+      <div class="sheet__title">目标设置（简化版）</div>
+      <div class="sheet__body">
+        <div class="form">
+          <label class="field">
+            <span class="field__label">目标</span>
+            <select id="goalType" class="select">
+              <option value="cut">减脂</option>
+              <option value="bulk">增肌</option>
+              <option value="maintain" selected>健康维持</option>
+            </select>
+          </label>
+
+          <div class="grid2">
+            <label class="field">
+              <span class="field__label">性别</span>
+              <select id="sex" class="select">
+                <option value="male" selected>男</option>
+                <option value="female">女</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="field__label">年龄</span>
+              <input id="age" class="input" type="number" inputmode="numeric" min="10" max="90" value="28" />
+            </label>
+          </div>
+
+          <div class="grid2">
+            <label class="field">
+              <span class="field__label">身高(cm)</span>
+              <input id="height" class="input" type="number" inputmode="numeric" min="120" max="220" value="175" />
+            </label>
+            <label class="field">
+              <span class="field__label">体重(kg)</span>
+              <input id="weight" class="input" type="number" inputmode="decimal" min="35" max="200" value="70" />
+            </label>
+          </div>
+
+          <label class="field">
+            <span class="field__label">活动水平</span>
+            <select id="activity" class="select">
+              <option value="1.2">久坐</option>
+              <option value="1.375" selected>轻度活动</option>
+              <option value="1.55">中度活动</option>
+              <option value="1.725">高强度</option>
+            </select>
+          </label>
+
+          <div class="hint">将用 Mifflin-St Jeor + 活动系数估算 TDEE，并按目标分配 P/C/F。</div>
+        </div>
+      </div>
+      <div class="sheet__footer">
+        <button class="btn btn--ghost" data-close="1">取消</button>
+        <button class="btn btn--primary" id="saveProfileBtn">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
