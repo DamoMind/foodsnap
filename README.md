@@ -16,7 +16,7 @@ Take a photo of your meal, get instant nutrition analysis with calories, protein
 
 ## Demo
 
-Live demo: https://foodsnap.duizhan.app
+Live demo: https://foodsnap.duku.app
 
 ## Tech Stack
 
