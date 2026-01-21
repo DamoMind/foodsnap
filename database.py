@@ -1,5 +1,6 @@
 import json
 import sqlite3
+import uuid
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
@@ -88,6 +89,51 @@ class Database:
             )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_food_canonical_name ON food_nutrition(canonical_name);"
+            )
+
+            # Activity/exercise tracking table
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS daily_activity (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id TEXT NOT NULL,
+                    day_iso TEXT NOT NULL,
+                    exercise_kcal REAL DEFAULT 0,
+                    steps INTEGER DEFAULT 0,
+                    active_minutes INTEGER DEFAULT 0,
+                    source TEXT DEFAULT 'manual',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE(user_id, day_iso)
+                );
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_activity_user_day ON daily_activity(user_id, day_iso);"
+            )
+
+            # Users table for OAuth authentication
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS users (
+                    id TEXT PRIMARY KEY,
+                    email TEXT UNIQUE,
+                    name TEXT,
+                    avatar_url TEXT,
+                    provider TEXT NOT NULL,
+                    provider_id TEXT NOT NULL,
+                    legacy_user_id TEXT,
+                    created_at TEXT NOT NULL,
+                    last_login_at TEXT NOT NULL,
+                    UNIQUE(provider, provider_id)
+                );
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_users_legacy ON users(legacy_user_id);"
             )
 
             conn.commit()
@@ -281,3 +327,206 @@ class Database:
         ws = _week_start_local(d)
         we = ws + timedelta(days=6)
         return f"{ws.isoformat()}T00:00:00", f"{we.isoformat()}T23:59:59"
+
+    # ---------- Activity Tracking ----------
+    def upsert_activity(
+        self,
+        user_id: str,
+        day_iso: str,
+        exercise_kcal: float = 0,
+        steps: int = 0,
+        active_minutes: int = 0,
+        source: str = "manual"
+    ) -> Dict[str, Any]:
+        """Insert or update daily activity data."""
+        now = _utc_now_iso()
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO daily_activity(user_id, day_iso, exercise_kcal, steps, active_minutes, source, created_at, updated_at)
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(user_id, day_iso) DO UPDATE SET
+                    exercise_kcal=excluded.exercise_kcal,
+                    steps=excluded.steps,
+                    active_minutes=excluded.active_minutes,
+                    source=excluded.source,
+                    updated_at=excluded.updated_at
+                """,
+                (user_id, day_iso, exercise_kcal, steps, active_minutes, source, now, now),
+            )
+            conn.commit()
+        return self.get_activity(user_id, day_iso) or {}
+
+    def get_activity(self, user_id: str, day_iso: str) -> Optional[Dict[str, Any]]:
+        """Get activity data for a specific day."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM daily_activity WHERE user_id=? AND day_iso=?;",
+                (user_id, day_iso),
+            ).fetchone()
+            if not row:
+                return None
+            return {
+                "id": int(row["id"]),
+                "user_id": row["user_id"],
+                "day_iso": row["day_iso"],
+                "exercise_kcal": float(row["exercise_kcal"]),
+                "steps": int(row["steps"]),
+                "active_minutes": int(row["active_minutes"]),
+                "source": row["source"],
+                "created_at": row["created_at"],
+                "updated_at": row["updated_at"],
+            }
+
+    def get_activities_in_range(
+        self,
+        user_id: str,
+        start_day: str,
+        end_day: str
+    ) -> List[Dict[str, Any]]:
+        """Get activity data for a date range."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM daily_activity
+                WHERE user_id=? AND day_iso BETWEEN ? AND ?
+                ORDER BY day_iso ASC
+                """,
+                (user_id, start_day, end_day),
+            ).fetchall()
+            return [
+                {
+                    "id": int(row["id"]),
+                    "user_id": row["user_id"],
+                    "day_iso": row["day_iso"],
+                    "exercise_kcal": float(row["exercise_kcal"]),
+                    "steps": int(row["steps"]),
+                    "active_minutes": int(row["active_minutes"]),
+                    "source": row["source"],
+                }
+                for row in rows
+            ]
+
+    # ---------- User Management ----------
+    def create_or_update_user(
+        self,
+        provider: str,
+        provider_id: str,
+        email: Optional[str] = None,
+        name: Optional[str] = None,
+        avatar_url: Optional[str] = None,
+        legacy_user_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Create a new user or update existing one on login."""
+        now = _utc_now_iso()
+        with self._connect() as conn:
+            # Check if user exists by provider + provider_id
+            existing = conn.execute(
+                "SELECT id FROM users WHERE provider=? AND provider_id=?",
+                (provider, provider_id)
+            ).fetchone()
+
+            if existing:
+                # Update existing user
+                conn.execute(
+                    """
+                    UPDATE users SET
+                        email=COALESCE(?, email),
+                        name=COALESCE(?, name),
+                        avatar_url=COALESCE(?, avatar_url),
+                        last_login_at=?
+                    WHERE id=?
+                    """,
+                    (email, name, avatar_url, now, existing["id"])
+                )
+                conn.commit()
+                return self.get_user_by_id(existing["id"]) or {}
+            else:
+                # Create new user with generated UUID
+                user_id = str(uuid.uuid4())
+                conn.execute(
+                    """
+                    INSERT INTO users(id, email, name, avatar_url, provider, provider_id, legacy_user_id, created_at, last_login_at)
+                    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (user_id, email, name, avatar_url, provider, provider_id, legacy_user_id, now, now)
+                )
+                conn.commit()
+                return self.get_user_by_id(user_id) or {}
+
+    def get_user_by_id(self, user_id: str) -> Optional[Dict[str, Any]]:
+        """Get user by internal ID."""
+        with self._connect() as conn:
+            row = conn.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
+            if not row:
+                return None
+            return self._row_to_user(row)
+
+    def get_user_by_email(self, email: str) -> Optional[Dict[str, Any]]:
+        """Get user by email."""
+        with self._connect() as conn:
+            row = conn.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
+            if not row:
+                return None
+            return self._row_to_user(row)
+
+    def get_user_by_provider(self, provider: str, provider_id: str) -> Optional[Dict[str, Any]]:
+        """Get user by OAuth provider and ID."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM users WHERE provider=? AND provider_id=?",
+                (provider, provider_id)
+            ).fetchone()
+            if not row:
+                return None
+            return self._row_to_user(row)
+
+    def link_legacy_user(self, user_id: str, legacy_user_id: str) -> None:
+        """Link a legacy (anonymous) user_id to an authenticated user."""
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE users SET legacy_user_id=? WHERE id=?",
+                (legacy_user_id, user_id)
+            )
+            conn.commit()
+
+    def migrate_legacy_data(self, legacy_user_id: str, new_user_id: str) -> int:
+        """Migrate all data from legacy user_id to new user_id."""
+        count = 0
+        with self._connect() as conn:
+            # Migrate meals
+            cur = conn.execute(
+                "UPDATE meals SET user_id=? WHERE user_id=?",
+                (new_user_id, legacy_user_id)
+            )
+            count += cur.rowcount
+
+            # Migrate goals
+            cur = conn.execute(
+                "UPDATE user_goals SET user_id=? WHERE user_id=?",
+                (new_user_id, legacy_user_id)
+            )
+            count += cur.rowcount
+
+            # Migrate activity
+            cur = conn.execute(
+                "UPDATE daily_activity SET user_id=? WHERE user_id=?",
+                (new_user_id, legacy_user_id)
+            )
+            count += cur.rowcount
+
+            conn.commit()
+        return count
+
+    def _row_to_user(self, row: sqlite3.Row) -> Dict[str, Any]:
+        return {
+            "id": row["id"],
+            "email": row["email"],
+            "name": row["name"],
+            "avatar_url": row["avatar_url"],
+            "provider": row["provider"],
+            "provider_id": row["provider_id"],
+            "legacy_user_id": row["legacy_user_id"],
+            "created_at": row["created_at"],
+            "last_login_at": row["last_login_at"],
+        }

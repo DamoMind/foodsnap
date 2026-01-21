@@ -26,6 +26,9 @@
       <a class="icon-btn" href="./dashboard.html" aria-label="统计">
         <span class="icon">📊</span>
       </a>
+      <button class="icon-btn" id="userBtn" aria-label="登录/用户">
+        <span class="icon" id="userIcon">👤</span>
+      </button>
     </div>
   </header>
 
@@ -68,6 +71,19 @@
             </div>
             <div class="progress progress--sm"><div class="progress__bar" id="fBar" style="width:0%"></div></div>
           </div>
+        </div>
+
+        <!-- Exercise/Activity Row -->
+        <div class="exercise-row" id="exerciseRow">
+          <div class="exercise-info">
+            <span class="exercise-icon">🏃</span>
+            <span class="exercise-label" data-i18n="exercise">运动</span>
+            <span class="exercise-value"><span id="exerciseKcal">0</span> kcal <span data-i18n="exerciseBurned">消耗</span></span>
+          </div>
+          <div class="net-cal">
+            <span data-i18n="netCalories">净摄入</span>: <b id="netKcal">0</b> kcal
+          </div>
+          <button class="text-btn" id="addExerciseBtn" data-i18n="addExercise">添加运动</button>
         </div>
 
         <div class="advice" id="adviceCard">
@@ -193,6 +209,44 @@
     </div>
   </div>
 
+  <!-- 运动输入弹层 -->
+  <div class="sheet" id="exerciseSheet" aria-hidden="true">
+    <div class="sheet__mask" data-close="1"></div>
+    <div class="sheet__panel">
+      <div class="sheet__title" data-i18n="exerciseInput">运动输入</div>
+      <div class="sheet__body">
+        <div class="form">
+          <label class="field">
+            <span class="field__label" data-i18n="exerciseKcal">运动消耗</span>
+            <div class="input-group">
+              <input id="exerciseKcalInput" class="input" type="number" inputmode="numeric" min="0" max="5000" value="0" />
+              <span class="input-suffix">kcal</span>
+            </div>
+          </label>
+
+          <label class="field">
+            <span class="field__label" data-i18n="steps">步数</span>
+            <input id="stepsInput" class="input" type="number" inputmode="numeric" min="0" max="100000" value="0" />
+          </label>
+
+          <label class="field">
+            <span class="field__label" data-i18n="activeMinutes">活动时长</span>
+            <div class="input-group">
+              <input id="activeMinutesInput" class="input" type="number" inputmode="numeric" min="0" max="1440" value="0" />
+              <span class="input-suffix">min</span>
+            </div>
+          </label>
+
+          <div class="hint" data-i18n="exerciseHint">输入运动数据以计算净热量摄入。</div>
+        </div>
+      </div>
+      <div class="sheet__footer">
+        <button class="btn btn--ghost" data-close="1" data-i18n="cancel">取消</button>
+        <button class="btn btn--primary" id="saveExerciseBtn" data-i18n="save">保存</button>
+      </div>
+    </div>
+  </div>
+
   <!-- 目标设置弹层 -->
   <div class="sheet" id="profileSheet" aria-hidden="true">
     <div class="sheet__mask" data-close="1"></div>
@@ -253,6 +307,68 @@
       </div>
     </div>
   </div>
+
+  <!-- 登录/用户弹层 -->
+  <div class="sheet" id="authSheet" aria-hidden="true">
+    <div class="sheet__mask" data-close="1"></div>
+    <div class="sheet__panel">
+      <div class="sheet__title" id="authSheetTitle" data-i18n="login">登录</div>
+      <div class="sheet__body">
+        <!-- 未登录状态 -->
+        <div id="loginView">
+          <div class="auth-intro">
+            <p data-i18n="loginBenefit">登录后，您的数据将安全保存在云端，可在多设备间同步。</p>
+          </div>
+          <div class="auth-buttons">
+            <button class="btn auth-btn auth-btn--google" id="googleSignInBtn">
+              <svg class="auth-icon" viewBox="0 0 24 24" width="20" height="20">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+              </svg>
+              <span data-i18n="signInWithGoogle">使用 Google 登录</span>
+            </button>
+            <button class="btn auth-btn auth-btn--apple" id="appleSignInBtn">
+              <svg class="auth-icon" viewBox="0 0 24 24" width="20" height="20">
+                <path fill="currentColor" d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
+              </svg>
+              <span data-i18n="signInWithApple">使用 Apple 登录</span>
+            </button>
+          </div>
+          <div class="hint" data-i18n="loginPrivacy">我们不会公开您的个人信息。</div>
+        </div>
+
+        <!-- 已登录状态 -->
+        <div id="userView" hidden>
+          <div class="user-profile">
+            <img id="userAvatar" class="user-avatar" src="" alt="头像" />
+            <div class="user-info">
+              <div class="user-name" id="userName">用户名</div>
+              <div class="user-email" id="userEmail">email@example.com</div>
+            </div>
+          </div>
+          <div class="user-stats">
+            <div class="user-stat">
+              <span class="user-stat__label" data-i18n="provider">登录方式</span>
+              <span class="user-stat__value" id="userProvider">Google</span>
+            </div>
+            <div class="user-stat">
+              <span class="user-stat__label" data-i18n="memberSince">注册时间</span>
+              <span class="user-stat__value" id="userSince">-</span>
+            </div>
+          </div>
+          <button class="btn btn--ghost danger" id="logoutBtn" data-i18n="logout">退出登录</button>
+        </div>
+      </div>
+      <div class="sheet__footer">
+        <button class="btn btn--ghost" data-close="1" data-i18n="close">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Google Sign-In SDK -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
 
   <script src="./app.js"></script>
 </body>

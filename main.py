@@ -13,6 +13,7 @@ from PIL import Image
 import io
 
 from ai_service import AzureOpenAIVisionService, AzureClaudeVisionService, AIServiceError
+from auth_service import AuthService, AuthError
 from database import Database
 from nutrition_service import NutritionService
 
@@ -38,6 +39,13 @@ class Settings(BaseSettings):
     IMAGE_MAX_SIDE: int = 1280
     IMAGE_JPEG_QUALITY: int = 75
 
+    # Authentication
+    JWT_SECRET: str = ""  # Required for auth - generate with: python -c "import secrets; print(secrets.token_urlsafe(32))"
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
+    GOOGLE_CLIENT_ID: str = ""
+    APPLE_CLIENT_ID: str = ""  # Bundle ID, e.g., "com.yourapp.foodsnap"
+
     class Config:
         env_file = ".env"
 
@@ -46,6 +54,18 @@ settings = Settings()
 
 db = Database(settings.DB_PATH)
 nutrition = NutritionService(db)
+
+# Initialize auth service (optional - only if JWT_SECRET is configured)
+auth: Optional[AuthService] = None
+if settings.JWT_SECRET:
+    auth = AuthService(
+        jwt_secret=settings.JWT_SECRET,
+        jwt_algorithm=settings.JWT_ALGORITHM,
+        access_token_expire_minutes=settings.JWT_EXPIRE_MINUTES,
+        google_client_id=settings.GOOGLE_CLIENT_ID or None,
+        apple_client_id=settings.APPLE_CLIENT_ID or None,
+    )
+    print("Auth service initialized")
 
 # Initialize vision service based on configuration
 def _create_vision_service():
@@ -160,10 +180,206 @@ class GoalSetIn(BaseModel):
     profile: Dict[str, Any]
 
 
+class ActivityIn(BaseModel):
+    """Daily activity/exercise data input."""
+    exercise_kcal: float = Field(0, ge=0, description="Calories burned from exercise")
+    steps: int = Field(0, ge=0, description="Step count")
+    active_minutes: int = Field(0, ge=0, description="Active minutes")
+    source: str = Field("manual", description="Data source: manual, healthkit, etc.")
+
+
+class GoogleAuthIn(BaseModel):
+    """Google OAuth login request."""
+    id_token: str = Field(..., description="Google ID token from Sign-In SDK")
+
+
+class AppleAuthIn(BaseModel):
+    """Apple OAuth login request."""
+    id_token: str = Field(..., description="Apple ID token from Sign-In SDK")
+    user_name: Optional[str] = Field(None, description="User's name (only sent on first auth)")
+
+
+class AuthResponse(BaseModel):
+    """Authentication response with JWT token."""
+    access_token: str
+    token_type: str = "bearer"
+    user: Dict[str, Any]
+
+
+class UserResponse(BaseModel):
+    """Current user info response."""
+    user: Dict[str, Any]
+
+
+# ----------------- Helper: Extract user from auth token -----------------
+def _get_authenticated_user_id(authorization: Optional[str] = Header(default=None)) -> Optional[str]:
+    """Extract user ID from Authorization header if valid JWT token provided."""
+    if not authorization or not auth:
+        return None
+
+    if not authorization.startswith("Bearer "):
+        return None
+
+    token = authorization[7:]  # Remove "Bearer " prefix
+    try:
+        user_id = auth.get_user_id_from_token(token)
+        return user_id
+    except AuthError:
+        return None
+
+
+def _require_user_id_with_auth(
+    x_user_id: Optional[str] = Header(default=None),
+    authorization: Optional[str] = Header(default=None)
+) -> str:
+    """Get user ID from auth token or fall back to X-User-Id header."""
+    # Try to get from JWT token first
+    auth_user_id = _get_authenticated_user_id(authorization)
+    if auth_user_id:
+        return auth_user_id
+
+    # Fall back to legacy X-User-Id header
+    return (x_user_id or "demo").strip()
+
+
 # ----------------- Routes -----------------
 @app.get("/api/health")
 def health():
     return {"ok": True, "time": _iso_now_local()}
+
+
+# ----------------- Authentication Routes -----------------
+@app.post("/api/auth/google", response_model=AuthResponse)
+async def auth_google(payload: GoogleAuthIn):
+    """Authenticate with Google OAuth."""
+    if not auth:
+        raise HTTPException(status_code=501, detail="Authentication not configured")
+
+    if not settings.GOOGLE_CLIENT_ID:
+        raise HTTPException(status_code=501, detail="Google OAuth not configured")
+
+    try:
+        # Verify Google token and get user info
+        google_user = await auth.verify_google_token(payload.id_token)
+
+        # Create or update user in database
+        user = db.create_or_update_user(
+            provider=google_user["provider"],
+            provider_id=google_user["provider_id"],
+            email=google_user.get("email"),
+            name=google_user.get("name"),
+            avatar_url=google_user.get("avatar_url"),
+        )
+
+        # Generate JWT token
+        access_token = auth.create_access_token(
+            user_id=user["id"],
+            extra_claims={"email": user.get("email")}
+        )
+
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "user": user
+        }
+
+    except AuthError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+
+
+@app.post("/api/auth/apple", response_model=AuthResponse)
+async def auth_apple(payload: AppleAuthIn):
+    """Authenticate with Apple OAuth."""
+    if not auth:
+        raise HTTPException(status_code=501, detail="Authentication not configured")
+
+    if not settings.APPLE_CLIENT_ID:
+        raise HTTPException(status_code=501, detail="Apple OAuth not configured")
+
+    try:
+        # Verify Apple token and get user info
+        apple_user = await auth.verify_apple_token(payload.id_token)
+
+        # Apple only sends name on first authorization, so use provided name
+        name = payload.user_name or apple_user.get("name")
+
+        # Create or update user in database
+        user = db.create_or_update_user(
+            provider=apple_user["provider"],
+            provider_id=apple_user["provider_id"],
+            email=apple_user.get("email"),
+            name=name,
+            avatar_url=None,  # Apple doesn't provide avatars
+        )
+
+        # Generate JWT token
+        access_token = auth.create_access_token(
+            user_id=user["id"],
+            extra_claims={"email": user.get("email")}
+        )
+
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "user": user
+        }
+
+    except AuthError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+
+
+@app.get("/api/auth/me", response_model=UserResponse)
+async def get_current_user(authorization: Optional[str] = Header(default=None)):
+    """Get current authenticated user info."""
+    if not auth:
+        raise HTTPException(status_code=501, detail="Authentication not configured")
+
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    token = authorization[7:]
+    try:
+        user_id = auth.get_user_id_from_token(token)
+        user = db.get_user_by_id(user_id)
+
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        return {"user": user}
+
+    except AuthError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+
+
+@app.post("/api/auth/link-legacy")
+async def link_legacy_account(
+    authorization: Optional[str] = Header(default=None),
+    x_user_id: Optional[str] = Header(default=None)
+):
+    """Link a legacy device user ID to an authenticated account."""
+    if not auth:
+        raise HTTPException(status_code=501, detail="Authentication not configured")
+
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    if not x_user_id:
+        raise HTTPException(status_code=400, detail="X-User-Id header required")
+
+    token = authorization[7:]
+    try:
+        user_id = auth.get_user_id_from_token(token)
+
+        # Link legacy user to authenticated user
+        db.link_legacy_user(user_id, x_user_id.strip())
+
+        # Migrate all legacy data to the new user ID
+        db.migrate_legacy_data(x_user_id.strip(), user_id)
+
+        return {"message": "Legacy account linked successfully", "user_id": user_id}
+
+    except AuthError as e:
+        raise HTTPException(status_code=401, detail=str(e))
 
 
 @app.post("/api/analyze", response_model=AnalyzeResponse)
@@ -220,11 +436,27 @@ def create_meal(payload: MealCreateIn, x_user_id: Optional[str] = Header(default
 
 @app.get("/api/stats/daily")
 def stats_daily(x_user_id: Optional[str] = Header(default=None), day: Optional[str] = None):
+    """Daily stats including activity and net calories."""
     user_id = _require_user_id(x_user_id)
-    meals = db.list_meals_by_date(user_id, day_iso=day)
+    day_iso = day or _today_iso()
+
+    meals = db.list_meals_by_date(user_id, day_iso=day_iso)
     totals = nutrition.aggregate_totals(meals)
     goal = db.get_user_goal(user_id)
-    return {"day": day or _today_iso(), "totals": totals, "goal": goal, "meals_count": len(meals)}
+    activity = db.get_activity(user_id, day_iso)
+
+    # Calculate net calories (intake - exercise)
+    exercise_kcal = activity.get("exercise_kcal", 0) if activity else 0
+    net_kcal = int(totals.get("kcal", 0)) - int(exercise_kcal)
+
+    return {
+        "day": day_iso,
+        "totals": totals,
+        "goal": goal,
+        "meals_count": len(meals),
+        "activity": activity,
+        "net_kcal": net_kcal
+    }
 
 
 @app.get("/api/stats/weekly")
@@ -261,6 +493,90 @@ def recommendations(x_user_id: Optional[str] = Header(default=None)):
     goal = db.get_user_goal(user_id)
     rec = nutrition.recommend_next_meal(goal, totals)
     return {"day": _today_iso(), "today_totals": totals, "goal": goal, "recommendation": rec}
+
+
+# ----------------- Activity Tracking -----------------
+@app.post("/api/activity")
+def save_activity(
+    payload: ActivityIn,
+    x_user_id: Optional[str] = Header(default=None),
+    day: Optional[str] = None
+):
+    """Save daily activity/exercise data."""
+    user_id = _require_user_id(x_user_id)
+    day_iso = day or _today_iso()
+
+    activity = db.upsert_activity(
+        user_id=user_id,
+        day_iso=day_iso,
+        exercise_kcal=payload.exercise_kcal,
+        steps=payload.steps,
+        active_minutes=payload.active_minutes,
+        source=payload.source
+    )
+    return {"activity": activity}
+
+
+@app.get("/api/activity")
+def get_activity(
+    x_user_id: Optional[str] = Header(default=None),
+    day: Optional[str] = None
+):
+    """Get activity data for a specific day."""
+    user_id = _require_user_id(x_user_id)
+    day_iso = day or _today_iso()
+
+    activity = db.get_activity(user_id, day_iso)
+    return {"day": day_iso, "activity": activity}
+
+
+# ----------------- Insights (InsightFlow) -----------------
+# Initialize insight service with Azure config
+_insight_service = None
+
+def _get_insight_service():
+    global _insight_service
+    if _insight_service is None:
+        from insight_service import InsightService
+        _insight_service = InsightService(
+            db_path="insights.db",
+            azure_endpoint=settings.AZURE_OPENAI_ENDPOINT,
+            azure_api_key=settings.AZURE_OPENAI_API_KEY,
+            azure_deployment=settings.AZURE_OPENAI_DEPLOYMENT or "gpt-4o"
+        )
+    return _insight_service
+
+
+@app.get("/api/insights/weekly")
+async def weekly_insights(x_user_id: Optional[str] = Header(default=None)):
+    """Get AI-powered weekly nutrition insights."""
+    user_id = _require_user_id(x_user_id)
+
+    # Get week's meals
+    today = date.today()
+    week_start = today - timedelta(days=today.weekday())
+    week_end = week_start + timedelta(days=6)
+
+    meals = db.list_meals_in_range(
+        user_id,
+        f"{week_start.isoformat()}T00:00:00",
+        f"{week_end.isoformat()}T23:59:59"
+    )
+    goal = db.get_user_goal(user_id)
+
+    # Get insights
+    insight_svc = _get_insight_service()
+    if not insight_svc._started:
+        await insight_svc.start()
+
+    insight = await insight_svc.get_weekly_insight(user_id, meals, goal)
+
+    return {
+        "week_start": week_start.isoformat(),
+        "week_end": week_end.isoformat(),
+        "meals_count": len(meals),
+        "insight": insight
+    }
 
 
 # ----------------- Static Files -----------------

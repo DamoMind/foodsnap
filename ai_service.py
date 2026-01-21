@@ -71,26 +71,28 @@ class AzureClaudeVisionService:
         }
 
         user_text = (
-            "你是一个专业的食物识别与营养分析助手。请仔细分析这张图片中的食物。\n\n"
-            "对于每个识别出的食物，请提供：\n"
-            "1. name：中文常见名称\n"
-            "2. confidence：识别置信度 (0-1)\n"
-            "3. portion：份量估计 (单位g，给出min/max/estimated)\n"
-            "4. nutrition_per_100g：每100克营养成分\n"
-            "   - kcal: 热量\n"
-            "   - protein_g: 蛋白质\n"
-            "   - carbs_g: 碳水化合物\n"
-            "   - fat_g: 脂肪\n"
-            "5. cooking_method：烹饪方式\n"
-            "6. notes：备注说明\n"
-            "7. need_user_confirm：是否需要用户确认\n\n"
-            "营养数据参考：\n"
-            "- 米饭(熟)每100g: 116kcal, 2.6g蛋白, 25.9g碳水, 0.3g脂肪\n"
-            "- 鸡胸肉每100g: 165kcal, 31g蛋白, 0g碳水, 3.6g脂肪\n"
-            "- 红烧肉每100g: 500kcal, 15g蛋白, 5g碳水, 45g脂肪\n"
-            "- 西兰花每100g: 34kcal, 2.8g蛋白, 6.6g碳水, 0.4g脂肪\n"
-            "- 鸡蛋每100g: 143kcal, 13g蛋白, 1.1g碳水, 9.5g脂肪\n\n"
-            f"请只输出JSON格式，结构如下：\n{json.dumps(schema_hint, ensure_ascii=False, indent=2)}"
+            "You are a professional food recognition and nutrition analysis assistant. "
+            "Please carefully analyze the food in this image.\n\n"
+            "你是一个专业的食物识别与营养分析助手。请仔细分析这张图片中的食物。\n"
+            "あなたはプロの食品認識・栄養分析アシスタントです。この画像の食べ物を分析してください。\n\n"
+            "For each recognized food, provide:\n"
+            "1. name: Common name (use the food's native language - 中文/日本語/English as appropriate)\n"
+            "2. confidence: Recognition confidence (0-1)\n"
+            "3. portion: Portion estimate (unit: g, provide min/max/estimated)\n"
+            "4. nutrition_per_100g: Nutrition per 100g\n"
+            "   - kcal, protein_g, carbs_g, fat_g\n"
+            "5. cooking_method: Cooking method\n"
+            "6. notes: Notes\n"
+            "7. need_user_confirm: Whether user confirmation is needed\n\n"
+            "Nutrition reference data:\n"
+            "- Rice (cooked) 100g: 116kcal, 2.6g protein, 25.9g carbs, 0.3g fat\n"
+            "- Chicken breast 100g: 165kcal, 31g protein, 0g carbs, 3.6g fat\n"
+            "- 红烧肉 (braised pork) 100g: 500kcal, 15g protein, 5g carbs, 45g fat\n"
+            "- 刺身/Sashimi 100g: 127kcal, 26g protein, 0g carbs, 2g fat\n"
+            "- ラーメン/Ramen 100g: 89kcal, 5g protein, 13g carbs, 2g fat\n"
+            "- 寿司/Sushi (nigiri) 100g: 150kcal, 6g protein, 22g carbs, 4g fat\n"
+            "- 天ぷら/Tempura 100g: 200kcal, 5g protein, 20g carbs, 11g fat\n\n"
+            f"Output JSON only, following this structure:\n{json.dumps(schema_hint, ensure_ascii=False, indent=2)}"
         )
 
         payload = {
@@ -219,16 +221,16 @@ class AzureOpenAIVisionService:
         data_url = self._image_to_data_url(image_bytes, mime)
 
         system = (
-            "你是一个专业的食物识别与营养分析助手。"
-            "请基于图片识别餐盘中的食物，给出每个食物的份量估计（克）和每100克的营养成分。"
-            "你有丰富的食物营养知识，请根据食物类型和烹饪方式准确估算营养。"
-            "输出必须是严格 JSON，不要包含任何额外文本。"
+            "You are a professional food recognition and nutrition analysis assistant. "
+            "Identify foods in images and provide portion estimates (grams) and nutrition per 100g. "
+            "You have extensive knowledge of food nutrition from various cuisines (Chinese, Japanese, Western, etc.). "
+            "Output must be strict JSON with no extra text."
         )
 
         schema_hint = {
             "foods": [
                 {
-                    "name": "string (中文常见名)",
+                    "name": "string (native language name - 中文/日本語/English)",
                     "confidence": 0.85,
                     "portion": {"unit": "g", "min": 100, "max": 200, "estimated": 150},
                     "nutrition_per_100g": {
@@ -237,7 +239,7 @@ class AzureOpenAIVisionService:
                         "carbs_g": 20.0,
                         "fat_g": 5.0
                     },
-                    "cooking_method": "string (如：清炒、红烧、蒸等)",
+                    "cooking_method": "string (e.g., stir-fried, braised, steamed, grilled)",
                     "notes": "string",
                     "need_user_confirm": False,
                 }
@@ -248,19 +250,22 @@ class AzureOpenAIVisionService:
         }
 
         user_text = (
-            "识别图片中的所有食物。对每个食物给出：\n"
-            "1. name：中文常见名\n"
-            "2. confidence：0-1的置信度\n"
-            "3. portion：份量估计(单位g，给出min/max/estimated)\n"
-            "4. nutrition_per_100g：每100克营养成分(kcal热量, protein_g蛋白质, carbs_g碳水化合物, fat_g脂肪)\n"
-            "5. cooking_method：烹饪方式\n"
-            "6. notes：备注\n"
-            "7. need_user_confirm：是否需要用户确认\n\n"
-            "营养数据要根据食物类型和烹饪方式准确估算。例如：\n"
-            "- 米饭(熟)每100g约116kcal, 2.6g蛋白, 25.9g碳水, 0.3g脂肪\n"
-            "- 鸡胸肉每100g约165kcal, 31g蛋白, 0g碳水, 3.6g脂肪\n"
-            "- 红烧肉每100g约500kcal, 15g蛋白, 5g碳水, 45g脂肪\n\n"
-            f"请严格按以下 JSON 结构输出：{json.dumps(schema_hint, ensure_ascii=False)}"
+            "Identify all foods in the image. For each food provide:\n"
+            "1. name: Common name (use native language - 中文 for Chinese food, 日本語 for Japanese, English for Western)\n"
+            "2. confidence: 0-1 confidence score\n"
+            "3. portion: Portion estimate (unit: g, with min/max/estimated)\n"
+            "4. nutrition_per_100g: Nutrition per 100g (kcal, protein_g, carbs_g, fat_g)\n"
+            "5. cooking_method: Cooking method\n"
+            "6. notes: Notes\n"
+            "7. need_user_confirm: Whether user confirmation needed\n\n"
+            "Nutrition reference:\n"
+            "- Rice (cooked) 100g: 116kcal, 2.6g protein, 25.9g carbs, 0.3g fat\n"
+            "- Chicken breast 100g: 165kcal, 31g protein, 0g carbs, 3.6g fat\n"
+            "- 红烧肉 (braised pork) 100g: 500kcal, 15g protein, 5g carbs, 45g fat\n"
+            "- 刺身/Sashimi 100g: 127kcal, 26g protein, 0g carbs, 2g fat\n"
+            "- ラーメン/Ramen 100g: 89kcal, 5g protein, 13g carbs, 2g fat\n"
+            "- 寿司/Sushi 100g: 150kcal, 6g protein, 22g carbs, 4g fat\n\n"
+            f"Output strict JSON: {json.dumps(schema_hint, ensure_ascii=False)}"
         )
 
         payload = {

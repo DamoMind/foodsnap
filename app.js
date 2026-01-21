@@ -26,8 +26,12 @@
     profile: 'fs_profile_v1',
     logs: 'fs_logs_v1', // { 'YYYY-MM-DD': MealRecord[] }
     lang: 'fs_lang_v1',
-    userId: 'fs_user_id'
+    userId: 'fs_user_id',
+    authToken: 'fs_auth_token',
+    authUser: 'fs_auth_user'
   };
+
+  const API_BASE = '';  // Same origin
 
   // 获取或生成唯一用户ID（用于数据隔离）
   function getUserId() {
@@ -106,7 +110,27 @@
       manual: '手动',
       recognized: '识别',
       per100g: '每100g',
-      retake: '重拍'
+      retake: '重拍',
+      exercise: '运动',
+      exerciseBurned: '消耗',
+      netCalories: '净摄入',
+      addExercise: '添加运动',
+      exerciseInput: '运动输入',
+      exerciseKcal: '运动消耗',
+      steps: '步数',
+      activeMinutes: '活动时长',
+      exerciseHint: '输入运动数据以计算净热量摄入。',
+      login: '登录',
+      logout: '退出登录',
+      loginBenefit: '登录后，您的数据将安全保存在云端，可在多设备间同步。',
+      loginPrivacy: '我们不会公开您的个人信息。',
+      signInWithGoogle: '使用 Google 登录',
+      signInWithApple: '使用 Apple 登录',
+      provider: '登录方式',
+      memberSince: '注册时间',
+      userProfile: '用户信息',
+      linkLegacy: '关联本机数据',
+      linkLegacyHint: '将本机已有数据迁移到您的账号'
     },
     en: {
       title: 'FoodSnap - Today',
@@ -172,11 +196,124 @@
       manual: 'Manual',
       recognized: 'AI',
       per100g: 'per 100g',
-      retake: 'Retake'
+      retake: 'Retake',
+      exercise: 'Exercise',
+      exerciseBurned: 'Burned',
+      netCalories: 'Net Cal',
+      addExercise: 'Add Exercise',
+      exerciseInput: 'Exercise Input',
+      exerciseKcal: 'Calories Burned',
+      steps: 'Steps',
+      activeMinutes: 'Active Minutes',
+      exerciseHint: 'Enter your exercise data to calculate net calories.',
+      login: 'Login',
+      logout: 'Log Out',
+      loginBenefit: 'Login to sync your data across devices and keep it safe in the cloud.',
+      loginPrivacy: 'We will not share your personal information.',
+      signInWithGoogle: 'Sign in with Google',
+      signInWithApple: 'Sign in with Apple',
+      provider: 'Login Method',
+      memberSince: 'Member Since',
+      userProfile: 'User Profile',
+      linkLegacy: 'Link Device Data',
+      linkLegacyHint: 'Migrate existing device data to your account'
+    },
+    ja: {
+      title: 'FoodSnap - 今日',
+      today: '今日',
+      todayProgress: '今日の進捗',
+      goalSettings: '目標設定',
+      calories: 'カロリー',
+      protein: 'タンパク質',
+      carbs: '炭水化物',
+      fat: '脂質',
+      advice: 'アドバイス',
+      setGoalHint: '目標を設定すると、パーソナライズされたアドバイスが表示されます。',
+      todayRecords: '今日の記録',
+      clearToday: '今日をクリア',
+      noRecords: 'まだ記録がありません。下の「食事を記録」をタップして始めましょう。',
+      snapMeal: '食事を記録',
+      photoUpload: '写真/アップロード',
+      openCamera: 'カメラを開く',
+      fromAlbum: 'アルバムから選択',
+      compressHint: '写真を選択すると、自動的にAI認識が始まります。',
+      mealType: '食事タイプ',
+      breakfast: '朝食',
+      lunch: '昼食',
+      dinner: '夕食',
+      snack: '間食',
+      startAnalyze: '分析開始',
+      analyzing: '分析中…（AI処理）',
+      compressing: '画像処理中…',
+      close: '閉じる',
+      confirmResult: '結果確認',
+      mealCalories: 'この食事のカロリー',
+      foodList: '食品リスト',
+      addManual: '手動で追加',
+      adjustHint: 'スライダーで分量(g)を調整すると、栄養が自動更新されます。',
+      saveTo: '保存先',
+      back: '戻る',
+      goalSettingsTitle: '目標設定',
+      goal: '目標',
+      cut: '減量',
+      bulk: '増量',
+      maintain: '維持',
+      sex: '性別',
+      male: '男性',
+      female: '女性',
+      age: '年齢',
+      height: '身長(cm)',
+      weight: '体重(kg)',
+      activityLevel: '活動レベル',
+      sedentary: '座り仕事',
+      light: '軽い運動',
+      moderate: '適度な運動',
+      active: '激しい運動',
+      tdeeHint: 'Mifflin-St Jeor式でTDEEとマクロ分割を計算します。',
+      cancel: 'キャンセル',
+      save: '保存',
+      view: '表示',
+      delete: '削除',
+      confirmClear: '今日の記録をすべてクリアしますか？',
+      confirmDelete: 'この食事記録を削除しますか？',
+      inputFoodName: '食品名を入力（例：ヨーグルト、牛肉、パン）',
+      inputPortion: '分量(g)を入力（例：150）',
+      confidence: '信頼度',
+      manual: '手動',
+      recognized: 'AI',
+      per100g: '100gあたり',
+      retake: '撮り直す',
+      exercise: '運動',
+      exerciseBurned: '消費',
+      netCalories: '正味カロリー',
+      addExercise: '運動を追加',
+      exerciseInput: '運動入力',
+      exerciseKcal: '消費カロリー',
+      steps: '歩数',
+      activeMinutes: 'アクティブ時間',
+      exerciseHint: '運動データを入力して正味カロリーを計算します。',
+      login: 'ログイン',
+      logout: 'ログアウト',
+      loginBenefit: 'ログインすると、データがクラウドに安全に保存され、複数のデバイスで同期できます。',
+      loginPrivacy: '個人情報は公開されません。',
+      signInWithGoogle: 'Googleでログイン',
+      signInWithApple: 'Appleでログイン',
+      provider: 'ログイン方法',
+      memberSince: '登録日',
+      userProfile: 'ユーザー情報',
+      linkLegacy: '端末データを連携',
+      linkLegacyHint: '既存の端末データをアカウントに移行'
     }
   };
 
-  let currentLang = localStorage.getItem(LS_KEYS.lang) || (navigator.language.startsWith('zh') ? 'zh' : 'en');
+  // 语言检测：支持中文、英文、日语
+  function detectDefaultLang() {
+    const nav = navigator.language.toLowerCase();
+    if (nav.startsWith('zh')) return 'zh';
+    if (nav.startsWith('ja')) return 'ja';
+    return 'en';
+  }
+  let currentLang = localStorage.getItem(LS_KEYS.lang) || detectDefaultLang();
 
   function t(key) {
     return i18n[currentLang]?.[key] || i18n.en[key] || key;
@@ -193,16 +330,24 @@
         el.textContent = t(key);
       }
     });
-    document.documentElement.lang = currentLang === 'zh' ? 'zh-CN' : 'en';
+    // 设置 HTML lang 属性
+    const langMap = { zh: 'zh-CN', en: 'en', ja: 'ja' };
+    document.documentElement.lang = langMap[currentLang] || 'en';
+    // 语言按钮显示下一个语言
     const langBtn = document.getElementById('langToggle');
-    if (langBtn) langBtn.textContent = currentLang === 'zh' ? 'EN' : '中';
+    if (langBtn) {
+      const nextLangLabel = { zh: 'EN', en: '日本語', ja: '中' };
+      langBtn.textContent = nextLangLabel[currentLang] || 'EN';
+    }
     // 动态更新重拍按钮文本
     const retakeBtn = document.getElementById('retakeBtn');
     if (retakeBtn) retakeBtn.textContent = t('retake');
   }
 
   function toggleLang() {
-    currentLang = currentLang === 'zh' ? 'en' : 'zh';
+    // 循环切换：中文 → 英文 → 日语 → 中文
+    const langCycle = { zh: 'en', en: 'ja', ja: 'zh' };
+    currentLang = langCycle[currentLang] || 'en';
     localStorage.setItem(LS_KEYS.lang, currentLang);
     applyI18n();
     gtmEvent('language_switch', { language: currentLang });
@@ -211,7 +356,8 @@
   function getMealLabel(type) {
     const labels = {
       zh: { breakfast: '早餐', lunch: '午餐', dinner: '晚餐', snack: '加餐' },
-      en: { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', snack: 'Snack' }
+      en: { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', snack: 'Snack' },
+      ja: { breakfast: '朝食', lunch: '昼食', dinner: '夕食', snack: '間食' }
     };
     return labels[currentLang]?.[type] || labels.en[type] || type;
   }
@@ -373,37 +519,61 @@
     );
   }
 
-  function buildAdvice(profile, daySum) {
+  function buildAdvice(profile, daySum, exerciseKcal = 0) {
     const g = profile.goals;
-    const dk = g.kcal - daySum.kcal;
+    // Use net calories (intake - exercise) for advice
+    const netKcal = daySum.kcal - exerciseKcal;
+    const dk = g.kcal - netKcal; // Remaining net calories
     const dp = g.p - daySum.p;
     const dc = g.c - daySum.c;
     const df = g.f - daySum.f;
 
+    // Exercise-aware advice
+    if (exerciseKcal > 200 && dk > 200) {
+      return currentLang === 'zh'
+        ? `今天运动消耗了 ${exerciseKcal} kcal，净摄入还有 ${round0(dk)} kcal 空间。可以适当补充碳水和蛋白质恢复体力。`
+        : currentLang === 'ja'
+        ? `今日の運動で ${exerciseKcal} kcal消費。あと ${round0(dk)} kcal摂取できます。炭水化物とタンパク質で体力を回復しましょう。`
+        : `Burned ${exerciseKcal} kcal exercising. You have ${round0(dk)} kcal remaining. Replenish with carbs and protein for recovery.`;
+    }
+
     // Bilingual advice templates
     if (dk < -150) {
+      const msg = exerciseKcal > 0
+        ? (currentLang === 'zh' ? `（已扣除运动消耗 ${exerciseKcal} kcal）` : ` (after ${exerciseKcal} kcal exercise)`)
+        : '';
       return currentLang === 'zh'
-        ? `今天热量已超出约 ${round0(-dk)} kcal。下一餐建议：主食减半 + 选择清淡蛋白（鸡胸/豆腐/鱼）+ 多蔬菜。`
-        : `Calories exceeded by ~${round0(-dk)} kcal today. Next meal: halve carbs, choose lean protein (chicken/tofu/fish), add more veggies.`;
+        ? `今天净热量已超出约 ${round0(-dk)} kcal${msg}。下一餐建议：主食减半 + 选择清淡蛋白（鸡胸/豆腐/鱼）+ 多蔬菜。`
+        : currentLang === 'ja'
+        ? `本日の正味カロリーが約 ${round0(-dk)} kcal超過${msg}。次の食事：炭水化物半分、低脂肪タンパク質、野菜多め。`
+        : `Net calories exceeded by ~${round0(-dk)} kcal${msg}. Next meal: halve carbs, choose lean protein (chicken/tofu/fish), add more veggies.`;
     }
     if (dp > 20) {
       const proteinNeed = round0(Math.min(dp, 35));
       return currentLang === 'zh'
         ? `你今天还差蛋白约 ${round0(dp)}g。下一餐建议补 ${proteinNeed}g 蛋白：鸡胸 150g / 豆腐 300g / 无糖酸奶 400g。`
+        : currentLang === 'ja'
+        ? `今日あと約 ${round0(dp)}g のタンパク質が必要。${proteinNeed}g 追加：鶏胸肉 150g / 豆腐 300g / ギリシャヨーグルト 400g。`
         : `You need ~${round0(dp)}g more protein today. Next meal: add ${proteinNeed}g protein - chicken 150g / tofu 300g / Greek yogurt 400g.`;
     }
     if (df < -15) {
       return currentLang === 'zh'
         ? `今天脂肪偏高（超出约 ${round0(-df)}g）。下一餐建议：少油烹饪，避免油炸/坚果/高油酱料，优先蒸煮。`
+        : currentLang === 'ja'
+        ? `脂質が高め（約 ${round0(-df)}g超過）。次の食事：油を控え、揚げ物・ナッツ・オイリーなソースを避け、蒸し料理を。`
         : `Fat intake high (exceeded by ~${round0(-df)}g). Next meal: cook with less oil, avoid fried foods/nuts/heavy sauces, prefer steaming.`;
     }
     if (dc < -40 && dk > 150) {
       return currentLang === 'zh'
         ? `今天碳水偏低且热量还有余量。下一餐可补碳水约 ${round0(Math.min(-dc, 80))}g：米饭 150g / 面条 200g / 土豆 300g（搭配蛋白）。`
+        : currentLang === 'ja'
+        ? `炭水化物が少なめですがカロリーに余裕あり。約 ${round0(Math.min(-dc, 80))}g の炭水化物を：ご飯 150g / 麺 200g / じゃがいも 300g。`
         : `Carbs low but calories available. Add ~${round0(Math.min(-dc, 80))}g carbs: rice 150g / noodles 200g / potato 300g (with protein).`;
     }
     return currentLang === 'zh'
       ? `整体进度不错。下一餐建议：一份优质蛋白 + 两份蔬菜 + 适量主食，尽量少油少糖。`
+      : currentLang === 'ja'
+      ? `順調です。次の食事：良質なタンパク質1品 + 野菜2品 + 適量の主食、油と砂糖は控えめに。`
       : `Good progress! Next meal: 1 portion protein + 2 portions veggies + moderate carbs, low oil & sugar.`;
   }
 
@@ -638,10 +808,246 @@
     });
   }
 
+  // ====== Authentication ======
+  const Auth = {
+    token: localStorage.getItem(LS_KEYS.authToken) || null,
+    user: loadJSON(LS_KEYS.authUser, null)
+  };
+
+  function isLoggedIn() {
+    return !!Auth.token && !!Auth.user;
+  }
+
+  function getAuthHeaders() {
+    const headers = { 'X-User-Id': getUserId() };
+    if (Auth.token) {
+      headers['Authorization'] = `Bearer ${Auth.token}`;
+    }
+    return headers;
+  }
+
+  function setAuthState(token, user) {
+    Auth.token = token;
+    Auth.user = user;
+    if (token) {
+      localStorage.setItem(LS_KEYS.authToken, token);
+    } else {
+      localStorage.removeItem(LS_KEYS.authToken);
+    }
+    if (user) {
+      saveJSON(LS_KEYS.authUser, user);
+    } else {
+      localStorage.removeItem(LS_KEYS.authUser);
+    }
+    updateAuthUI();
+  }
+
+  function logout() {
+    setAuthState(null, null);
+    showToast(currentLang === 'zh' ? '已退出登录' : currentLang === 'ja' ? 'ログアウトしました' : 'Logged out');
+  }
+
+  async function handleGoogleSignIn() {
+    try {
+      // Check if Google SDK is loaded
+      if (typeof google === 'undefined' || !google.accounts) {
+        showToast(currentLang === 'zh' ? 'Google 登录不可用' : 'Google Sign-In unavailable');
+        return;
+      }
+
+      // Initialize Google Sign-In
+      const client = google.accounts.oauth2.initTokenClient({
+        client_id: window.GOOGLE_CLIENT_ID || '',
+        scope: 'openid email profile',
+        callback: async (response) => {
+          if (response.error) {
+            console.error('Google auth error:', response.error);
+            showToast(currentLang === 'zh' ? '登录失败' : 'Login failed');
+            return;
+          }
+
+          try {
+            // Get ID token using access token
+            const userInfoRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+              headers: { 'Authorization': `Bearer ${response.access_token}` }
+            });
+            const userInfo = await userInfoRes.json();
+
+            // For demo purposes, we'll create a pseudo-token
+            // In production, you'd exchange the access token for an ID token
+            const authRes = await fetch(`${API_BASE}/api/auth/google`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id_token: response.access_token })
+            });
+
+            if (!authRes.ok) {
+              const err = await authRes.json().catch(() => ({}));
+              throw new Error(err.detail || 'Auth failed');
+            }
+
+            const data = await authRes.json();
+            setAuthState(data.access_token, data.user);
+
+            // Check if we should link legacy data
+            const legacyUserId = localStorage.getItem(LS_KEYS.userId);
+            if (legacyUserId && legacyUserId !== data.user.id) {
+              await linkLegacyAccount(legacyUserId);
+            }
+
+            showToast(currentLang === 'zh' ? '登录成功' : currentLang === 'ja' ? 'ログイン成功' : 'Login successful');
+            setSheetOpen($('#authSheet'), false);
+
+          } catch (err) {
+            console.error('Google login error:', err);
+            showToast(currentLang === 'zh' ? '登录失败' : 'Login failed');
+          }
+        }
+      });
+
+      client.requestAccessToken();
+
+    } catch (err) {
+      console.error('Google Sign-In error:', err);
+      showToast(currentLang === 'zh' ? 'Google 登录不可用' : 'Google Sign-In unavailable');
+    }
+  }
+
+  async function handleAppleSignIn() {
+    try {
+      // Check if Apple SDK is loaded
+      if (typeof AppleID === 'undefined') {
+        showToast(currentLang === 'zh' ? 'Apple 登录不可用' : 'Apple Sign-In unavailable');
+        return;
+      }
+
+      AppleID.auth.init({
+        clientId: window.APPLE_CLIENT_ID || '',
+        scope: 'name email',
+        redirectURI: window.location.origin,
+        usePopup: true
+      });
+
+      const response = await AppleID.auth.signIn();
+
+      if (response.authorization && response.authorization.id_token) {
+        const authRes = await fetch(`${API_BASE}/api/auth/apple`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id_token: response.authorization.id_token,
+            user_name: response.user?.name?.firstName
+              ? `${response.user.name.firstName} ${response.user.name.lastName || ''}`
+              : null
+          })
+        });
+
+        if (!authRes.ok) {
+          const err = await authRes.json().catch(() => ({}));
+          throw new Error(err.detail || 'Auth failed');
+        }
+
+        const data = await authRes.json();
+        setAuthState(data.access_token, data.user);
+
+        // Check if we should link legacy data
+        const legacyUserId = localStorage.getItem(LS_KEYS.userId);
+        if (legacyUserId && legacyUserId !== data.user.id) {
+          await linkLegacyAccount(legacyUserId);
+        }
+
+        showToast(currentLang === 'zh' ? '登录成功' : currentLang === 'ja' ? 'ログイン成功' : 'Login successful');
+        setSheetOpen($('#authSheet'), false);
+      }
+
+    } catch (err) {
+      console.error('Apple Sign-In error:', err);
+      showToast(currentLang === 'zh' ? 'Apple 登录不可用' : 'Apple Sign-In unavailable');
+    }
+  }
+
+  async function linkLegacyAccount(legacyUserId) {
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/link-legacy`, {
+        method: 'POST',
+        headers: {
+          ...getAuthHeaders(),
+          'X-User-Id': legacyUserId
+        }
+      });
+
+      if (res.ok) {
+        console.log('Legacy account linked successfully');
+        // Update local user ID to the authenticated one
+        localStorage.setItem(LS_KEYS.userId, Auth.user.id);
+      }
+    } catch (err) {
+      console.warn('Failed to link legacy account:', err);
+    }
+  }
+
+  function updateAuthUI() {
+    const userBtn = $('#userBtn');
+    const userIcon = $('#userIcon');
+    const authSheetTitle = $('#authSheetTitle');
+    const loginView = $('#loginView');
+    const userView = $('#userView');
+
+    if (!userBtn) return;
+
+    if (isLoggedIn()) {
+      userBtn.classList.add('logged-in');
+      // Show avatar initial or checkmark if logged in
+      if (Auth.user.avatar_url) {
+        userIcon.innerHTML = `<img src="${Auth.user.avatar_url}" alt="Avatar" style="width:24px;height:24px;border-radius:50%;object-fit:cover;">`;
+      } else {
+        userIcon.textContent = '✓';
+      }
+
+      if (loginView) loginView.hidden = true;
+      if (userView) userView.hidden = false;
+      if (authSheetTitle) authSheetTitle.textContent = t('userProfile');
+
+      // Update user info display
+      const userName = $('#userName');
+      const userEmail = $('#userEmail');
+      const userAvatar = $('#userAvatar');
+      const userProvider = $('#userProvider');
+      const userSince = $('#userSince');
+
+      if (userName) userName.textContent = Auth.user.name || 'User';
+      if (userEmail) userEmail.textContent = Auth.user.email || '';
+      if (userAvatar) {
+        if (Auth.user.avatar_url) {
+          userAvatar.src = Auth.user.avatar_url;
+        } else {
+          // Default avatar
+          userAvatar.src = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='50' fill='%230ea5e9'/%3E%3Ctext x='50' y='65' font-size='40' text-anchor='middle' fill='white'%3E${(Auth.user.name || 'U')[0].toUpperCase()}%3C/text%3E%3C/svg%3E`;
+        }
+      }
+      if (userProvider) {
+        const providerMap = { google: 'Google', apple: 'Apple' };
+        userProvider.textContent = providerMap[Auth.user.provider] || Auth.user.provider;
+      }
+      if (userSince && Auth.user.created_at) {
+        userSince.textContent = new Date(Auth.user.created_at).toLocaleDateString();
+      }
+
+    } else {
+      userBtn.classList.remove('logged-in');
+      userIcon.textContent = '👤';
+
+      if (loginView) loginView.hidden = false;
+      if (userView) userView.hidden = true;
+      if (authSheetTitle) authSheetTitle.textContent = t('login');
+    }
+  }
+
   // ====== App state ======
   const State = {
     profile: loadJSON(LS_KEYS.profile, null) || defaultProfile(),
     logs: loadJSON(LS_KEYS.logs, {}),
+    exercise: loadJSON('fs_exercise_v1', {}), // { 'YYYY-MM-DD': { exerciseKcal, steps, activeMinutes } }
     capture: { dataUrl: null, blob: null, mealType: getSmartMealType() },
     pendingMeal: null, // { items, imageDataUrl, mealType }
     editingMealId: null // track if we're editing an existing meal
@@ -711,6 +1117,22 @@
         showToast(currentLang === 'zh' ? '清空失败，请重试' : 'Clear failed, please retry');
       }
     });
+
+    // ====== Auth button handlers ======
+    $('#userBtn')?.addEventListener('click', () => {
+      updateAuthUI();
+      setSheetOpen($('#authSheet'), true);
+    });
+
+    $('#googleSignInBtn')?.addEventListener('click', handleGoogleSignIn);
+    $('#appleSignInBtn')?.addEventListener('click', handleAppleSignIn);
+    $('#logoutBtn')?.addEventListener('click', () => {
+      logout();
+      setSheetOpen($('#authSheet'), false);
+    });
+
+    // Initialize auth UI on load
+    updateAuthUI();
 
     // file inputs
     $('#cameraInput').addEventListener('change', onPickFile);
@@ -873,7 +1295,48 @@
       renderIndex();
     });
 
+    // open exercise sheet
+    $('#addExerciseBtn')?.addEventListener('click', () => {
+      fillExerciseForm();
+      setSheetOpen($('#exerciseSheet'), true);
+    });
+
+    // save exercise
+    $('#saveExerciseBtn')?.addEventListener('click', async () => {
+      const exerciseKcal = parseInt($('#exerciseKcalInput').value) || 0;
+      const steps = parseInt($('#stepsInput').value) || 0;
+      const activeMinutes = parseInt($('#activeMinutesInput').value) || 0;
+
+      try {
+        // Save to backend
+        await saveExerciseToAPI({ exerciseKcal, steps, activeMinutes });
+
+        // Also save locally for offline
+        const today = todayKey();
+        State.exercise = State.exercise || {};
+        State.exercise[today] = { exerciseKcal, steps, activeMinutes, source: 'manual' };
+        saveJSON('fs_exercise_v1', State.exercise);
+
+        gtmEvent('save_exercise', { kcal: exerciseKcal });
+        setSheetOpen($('#exerciseSheet'), false);
+        renderIndex();
+      } catch (err) {
+        console.error('Save exercise error:', err);
+        showToast(currentLang === 'zh' ? '保存失败' : 'Save failed');
+      }
+    });
+
     renderIndex();
+
+    // 后台同步待同步的餐食和加载运动数据
+    syncPendingMeals().catch(() => {});
+    loadExerciseFromAPI().then(ex => {
+      if (ex) {
+        const today = todayKey();
+        State.exercise[today] = ex;
+        renderIndex();
+      }
+    }).catch(() => {});
   }
 
   function resetCaptureUI() {
@@ -1127,6 +1590,69 @@
     State.logs = newLogs;
     gtmEvent('save_meal', { meal_type: mealType });
     State.pendingMeal = null;
+
+    // 后台同步到后端API（不阻塞UI）
+    syncMealToBackend(meal).catch(err => console.warn('Backend sync failed:', err));
+  }
+
+  // ====== 后端同步函数 ======
+  async function syncMealToBackend(meal) {
+    const userId = getUserId();
+    try {
+      const res = await fetch(`${API_BASE}/api/meals`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Id': userId
+        },
+        body: JSON.stringify({
+          meal_type: meal.mealType,
+          eaten_at: new Date(meal.createdAt).toISOString(),
+          items: meal.items.map(item => ({
+            name: item.name,
+            portion_g: item.portion_g || item.portion?.estimated || 100,
+            kcal: item.kcal || 0,
+            protein_g: item.protein_g || 0,
+            carbs_g: item.carbs_g || 0,
+            fat_g: item.fat_g || 0
+          })),
+          totals: meal.summary || sumMealItems(meal.items)
+        })
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      console.log('Meal synced to backend');
+      return await res.json();
+    } catch (err) {
+      console.warn('Backend meal sync failed (offline?):', err);
+      // 标记为待同步，下次有网时重试
+      markMealForSync(meal);
+      return null;
+    }
+  }
+
+  function markMealForSync(meal) {
+    const pending = loadJSON('fs_pending_sync', []);
+    pending.push({ ...meal, syncAttempts: 0 });
+    saveJSON('fs_pending_sync', pending);
+  }
+
+  // 尝试同步所有待同步的餐食
+  async function syncPendingMeals() {
+    const pending = loadJSON('fs_pending_sync', []);
+    if (pending.length === 0) return;
+
+    const stillPending = [];
+    for (const meal of pending) {
+      try {
+        await syncMealToBackend(meal);
+      } catch {
+        meal.syncAttempts = (meal.syncAttempts || 0) + 1;
+        if (meal.syncAttempts < 5) {
+          stillPending.push(meal);
+        }
+      }
+    }
+    saveJSON('fs_pending_sync', stillPending);
   }
 
   function renderIndex() {
@@ -1153,8 +1679,15 @@
     $('#cBar').style.width = `${clamp((s.c / g.c) * 100, 0, 120)}%`;
     $('#fBar').style.width = `${clamp((s.f / g.f) * 100, 0, 120)}%`;
 
+    // exercise data
+    const ex = getExerciseForToday();
+    const exerciseKcal = ex.exerciseKcal || 0;
+    const netKcal = round0(s.kcal - exerciseKcal);
+    $('#exerciseKcal').textContent = exerciseKcal;
+    $('#netKcal').textContent = netKcal;
+
     // advice
-    $('#adviceText').textContent = buildAdvice(State.profile, s);
+    $('#adviceText').textContent = buildAdvice(State.profile, s, exerciseKcal);
 
     // list
     const listEl = $('#todayList');
@@ -1289,6 +1822,66 @@
       activity: Number($('#activity').value || 1.2)
     };
     return p;
+  }
+
+  // ====== Exercise/Activity Functions ======
+  function fillExerciseForm() {
+    const today = todayKey();
+    const ex = State.exercise[today] || { exerciseKcal: 0, steps: 0, activeMinutes: 0 };
+    $('#exerciseKcalInput').value = ex.exerciseKcal || 0;
+    $('#stepsInput').value = ex.steps || 0;
+    $('#activeMinutesInput').value = ex.activeMinutes || 0;
+  }
+
+  async function saveExerciseToAPI({ exerciseKcal, steps, activeMinutes }) {
+    const userId = getUserId();
+    try {
+      const res = await fetch(`${API_BASE}/api/activity`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Id': userId
+        },
+        body: JSON.stringify({
+          exercise_kcal: exerciseKcal,
+          steps: steps,
+          active_minutes: activeMinutes,
+          source: 'manual'
+        })
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.json();
+    } catch (err) {
+      console.warn('API save exercise failed, using local only:', err);
+      return null;
+    }
+  }
+
+  async function loadExerciseFromAPI() {
+    const userId = getUserId();
+    try {
+      const res = await fetch(`${API_BASE}/api/activity?day=${todayKey()}`, {
+        headers: { 'X-User-Id': userId }
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+      if (data.activity) {
+        return {
+          exerciseKcal: data.activity.exercise_kcal || 0,
+          steps: data.activity.steps || 0,
+          activeMinutes: data.activity.active_minutes || 0
+        };
+      }
+      return null;
+    } catch (err) {
+      console.warn('API load exercise failed:', err);
+      return null;
+    }
+  }
+
+  function getExerciseForToday() {
+    const today = todayKey();
+    return State.exercise[today] || { exerciseKcal: 0, steps: 0, activeMinutes: 0 };
   }
 
   function escapeHtml(s) {

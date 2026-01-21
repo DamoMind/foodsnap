@@ -142,6 +142,45 @@ button, input, select{font:inherit}
 .macro__head{display:flex; justify-content:space-between; color:var(--muted); font-size:13px}
 .macro__head b{color:var(--text)}
 
+/* Exercise/Activity Row */
+.exercise-row{
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border:1px solid var(--border);
+  background: rgba(34,197,94,.08);
+  display:flex;
+  flex-wrap: wrap;
+  align-items:center;
+  gap: 8px 16px;
+}
+.exercise-info{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex:1;
+  min-width:140px;
+}
+.exercise-icon{font-size:18px}
+.exercise-label{color:var(--muted); font-size:13px}
+.exercise-value{color:var(--ok); font-weight:600}
+.net-cal{
+  color:var(--muted);
+  font-size:13px;
+}
+.net-cal b{color:var(--primary2)}
+
+.input-group{
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.input-suffix{
+  color:var(--muted);
+  font-size:14px;
+  white-space:nowrap;
+}
+
 .advice{
   margin-top: 12px;
   padding: 12px;
@@ -392,3 +431,120 @@ button, input, select{font:inherit}
 .field{display:flex; flex-direction:column; gap:8px}
 .field__label{color:var(--muted); font-size:12px}
 .grid2{display:grid; grid-template-columns: 1fr 1fr; gap:10px}
+
+/* Auth/Login Styles */
+.auth-intro{
+  text-align:center;
+  margin-bottom: 20px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.auth-buttons{
+  display:flex;
+  flex-direction:column;
+  gap: 12px;
+}
+
+.auth-btn{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap: 12px;
+  height: 50px;
+  font-weight: 600;
+  border-radius: 14px;
+  transition: transform .15s, box-shadow .15s;
+}
+.auth-btn:active{
+  transform: scale(0.98);
+}
+
+.auth-btn--google{
+  background: #fff;
+  color: #3c4043;
+  border: 1px solid #dadce0;
+}
+.auth-btn--google:hover{
+  box-shadow: 0 2px 8px rgba(0,0,0,.15);
+}
+
+.auth-btn--apple{
+  background: #000;
+  color: #fff;
+  border: 1px solid #333;
+}
+.auth-btn--apple:hover{
+  background: #1a1a1a;
+}
+
+.auth-icon{
+  flex-shrink: 0;
+}
+
+/* User Profile (logged in) */
+.user-profile{
+  display:flex;
+  align-items:center;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.user-avatar{
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  object-fit: cover;
+  background: var(--card2);
+}
+
+.user-info{
+  flex: 1;
+}
+
+.user-name{
+  font-weight: 700;
+  font-size: 18px;
+}
+
+.user-email{
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 2px;
+}
+
+.user-stats{
+  display:flex;
+  flex-direction:column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,.03);
+  margin-bottom: 16px;
+}
+
+.user-stat{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+
+.user-stat__label{
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.user-stat__value{
+  font-weight: 600;
+}
+
+/* User icon logged in state */
+.icon-btn.logged-in{
+  border-color: var(--primary);
+  background: rgba(14,165,233,.15);
+}
+.icon-btn.logged-in .icon{
+  color: var(--primary2);
+}
