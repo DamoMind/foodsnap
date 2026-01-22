@@ -7,10 +7,35 @@ import secrets
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 
-import httpx
-from jose import jwt, JWTError
-from google.oauth2 import id_token
-from google.auth.transport import requests as google_requests
+# Try to import auth dependencies - if not available, auth will be disabled
+_AUTH_DEPS_AVAILABLE = True
+_missing_deps = []
+
+try:
+    import httpx
+except ImportError as e:
+    _missing_deps.append("httpx")
+    httpx = None
+
+try:
+    from jose import jwt, JWTError
+except ImportError as e:
+    _missing_deps.append("python-jose")
+    jwt = None
+    class JWTError(Exception):
+        pass
+
+try:
+    from google.oauth2 import id_token
+    from google.auth.transport import requests as google_requests
+except ImportError as e:
+    _missing_deps.append("google-auth")
+    id_token = None
+    google_requests = None
+
+if _missing_deps:
+    _AUTH_DEPS_AVAILABLE = False
+    print(f"Warning: Auth dependencies not available ({', '.join(_missing_deps)}). Auth features disabled.")
 
 
 class AuthError(Exception):
@@ -29,6 +54,8 @@ class AuthService:
         google_client_id: Optional[str] = None,
         apple_client_id: Optional[str] = None,
     ):
+        if not _AUTH_DEPS_AVAILABLE:
+            raise ImportError(f"Auth dependencies not available: {', '.join(_missing_deps)}")
         self.jwt_secret = jwt_secret
         self.jwt_algorithm = jwt_algorithm
         self.access_token_expire_minutes = access_token_expire_minutes

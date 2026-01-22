@@ -13,8 +13,18 @@ from PIL import Image
 import io
 
 from ai_service import AzureOpenAIVisionService, AzureClaudeVisionService, AIServiceError
-from auth_service import AuthService, AuthError
 from database import Database
+
+# Auth service is optional - gracefully handle missing dependencies
+try:
+    from auth_service import AuthService, AuthError
+    AUTH_AVAILABLE = True
+except ImportError as e:
+    AUTH_AVAILABLE = False
+    AuthService = None
+    class AuthError(Exception):
+        pass
+    print(f"Warning: Auth service unavailable due to missing dependencies: {e}")
 from nutrition_service import NutritionService
 
 
@@ -55,9 +65,9 @@ settings = Settings()
 db = Database(settings.DB_PATH)
 nutrition = NutritionService(db)
 
-# Initialize auth service (optional - only if JWT_SECRET is configured)
-auth: Optional[AuthService] = None
-if settings.JWT_SECRET:
+# Initialize auth service (optional - only if JWT_SECRET is configured and dependencies available)
+auth: Optional["AuthService"] = None
+if AUTH_AVAILABLE and settings.JWT_SECRET:
     auth = AuthService(
         jwt_secret=settings.JWT_SECRET,
         jwt_algorithm=settings.JWT_ALGORITHM,
