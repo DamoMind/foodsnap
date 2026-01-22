@@ -17,11 +17,12 @@ from database import Database
 
 # Auth service is optional - gracefully handle missing dependencies
 try:
-    from auth_service import AuthService, AuthError
-    AUTH_AVAILABLE = True
+    from auth_service import AuthService, AuthError, _AUTH_DEPS_AVAILABLE
+    AUTH_AVAILABLE = _AUTH_DEPS_AVAILABLE  # Check if auth dependencies are actually available
 except ImportError as e:
     AUTH_AVAILABLE = False
     AuthService = None
+    _AUTH_DEPS_AVAILABLE = False
     class AuthError(Exception):
         pass
     print(f"Warning: Auth service unavailable due to missing dependencies: {e}")
