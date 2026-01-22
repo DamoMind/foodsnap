@@ -469,15 +469,6 @@ button, input, select{font:inherit}
   box-shadow: 0 2px 8px rgba(0,0,0,.15);
 }
 
-.auth-btn--apple{
-  background: #000;
-  color: #fff;
-  border: 1px solid #333;
-}
-.auth-btn--apple:hover{
-  background: #1a1a1a;
-}
-
 .auth-icon{
   flex-shrink: 0;
 }

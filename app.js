@@ -913,59 +913,6 @@
     }
   }
 
-  async function handleAppleSignIn() {
-    try {
-      // Check if Apple SDK is loaded
-      if (typeof AppleID === 'undefined') {
-        showToast(currentLang === 'zh' ? 'Apple 登录不可用' : 'Apple Sign-In unavailable');
-        return;
-      }
-
-      AppleID.auth.init({
-        clientId: window.APPLE_CLIENT_ID || '',
-        scope: 'name email',
-        redirectURI: window.location.origin,
-        usePopup: true
-      });
-
-      const response = await AppleID.auth.signIn();
-
-      if (response.authorization && response.authorization.id_token) {
-        const authRes = await fetch(`${API_BASE}/api/auth/apple`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id_token: response.authorization.id_token,
-            user_name: response.user?.name?.firstName
-              ? `${response.user.name.firstName} ${response.user.name.lastName || ''}`
-              : null
-          })
-        });
-
-        if (!authRes.ok) {
-          const err = await authRes.json().catch(() => ({}));
-          throw new Error(err.detail || 'Auth failed');
-        }
-
-        const data = await authRes.json();
-        setAuthState(data.access_token, data.user);
-
-        // Check if we should link legacy data
-        const legacyUserId = localStorage.getItem(LS_KEYS.userId);
-        if (legacyUserId && legacyUserId !== data.user.id) {
-          await linkLegacyAccount(legacyUserId);
-        }
-
-        showToast(currentLang === 'zh' ? '登录成功' : currentLang === 'ja' ? 'ログイン成功' : 'Login successful');
-        setSheetOpen($('#authSheet'), false);
-      }
-
-    } catch (err) {
-      console.error('Apple Sign-In error:', err);
-      showToast(currentLang === 'zh' ? 'Apple 登录不可用' : 'Apple Sign-In unavailable');
-    }
-  }
-
   async function linkLegacyAccount(legacyUserId) {
     try {
       const res = await fetch(`${API_BASE}/api/auth/link-legacy`, {
@@ -1125,7 +1072,6 @@
     });
 
     $('#googleSignInBtn')?.addEventListener('click', handleGoogleSignIn);
-    $('#appleSignInBtn')?.addEventListener('click', handleAppleSignIn);
     $('#logoutBtn')?.addEventListener('click', () => {
       logout();
       setSheetOpen($('#authSheet'), false);
