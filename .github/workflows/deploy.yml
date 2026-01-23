@@ -16,6 +16,8 @@ jobs:
 
       - name: Create deployment package
         run: |
+          # Add deployment marker with timestamp
+          echo "Deployed at $(date -u +%Y-%m-%dT%H:%M:%SZ) from commit ${{ github.sha }}" > DEPLOY_MARKER.txt
           zip -r deploy.zip . \
             -x "*.pyc" \
             -x "__pycache__/*" \
@@ -25,6 +27,8 @@ jobs:
             -x "cloudflare-deploy/*" \
             -x "*.db" \
             -x ".env"
+          # Show what's in the package for debugging
+          unzip -l deploy.zip | grep -E "(dashboard|main\.py|DEPLOY)" | head -10
 
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
@@ -32,8 +36,20 @@ jobs:
           app-name: foodsnap-api
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
           package: deploy.zip
+          clean: true
           restart: true
         # Resource group: chatgpt
 
       - name: Wait for deployment to propagate
         run: sleep 30
+
+      - name: Verify deployment
+        run: |
+          echo "Checking deployment marker..."
+          curl -s "https://foodsnap-api.azurewebsites.net/DEPLOY_MARKER.txt" || echo "Marker not found"
+          echo ""
+          echo "Checking dashboard.html for langToggle..."
+          curl -s "https://foodsnap-api.azurewebsites.net/dashboard.html" | grep -o "langToggle" || echo "langToggle NOT found"
+          echo ""
+          echo "Checking API version..."
+          curl -s "https://foodsnap-api.azurewebsites.net/api/health"
