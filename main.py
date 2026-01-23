@@ -140,7 +140,7 @@ def _create_vision_service():
 
 ai = _create_vision_service()
 
-app = FastAPI(title="Food AI Nutrition API", version="0.1.0")
+app = FastAPI(title="Food AI Nutrition API", version="0.1.1")
 
 # Rate limiting for auth endpoints
 if RATE_LIMIT_AVAILABLE:
