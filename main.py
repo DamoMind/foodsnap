@@ -721,22 +721,25 @@ async def weekly_insights(
 # Serve static files (frontend) - must be after API routes
 STATIC_DIR = Path(__file__).parent
 
+# Cache control headers to prevent stale content
+NO_CACHE_HEADERS = {"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache", "Expires": "0"}
+
 @app.get("/")
 async def serve_index():
-    return FileResponse(STATIC_DIR / "index.html")
+    return FileResponse(STATIC_DIR / "index.html", headers=NO_CACHE_HEADERS)
 
 @app.get("/index.html")
 async def serve_index_html():
-    return FileResponse(STATIC_DIR / "index.html")
+    return FileResponse(STATIC_DIR / "index.html", headers=NO_CACHE_HEADERS)
 
 @app.get("/dashboard.html")
 async def serve_dashboard():
-    return FileResponse(STATIC_DIR / "dashboard.html")
+    return FileResponse(STATIC_DIR / "dashboard.html", headers=NO_CACHE_HEADERS)
 
 @app.get("/style.css")
 async def serve_css():
-    return FileResponse(STATIC_DIR / "style.css", media_type="text/css")
+    return FileResponse(STATIC_DIR / "style.css", media_type="text/css", headers=NO_CACHE_HEADERS)
 
 @app.get("/app.js")
 async def serve_js():
-    return FileResponse(STATIC_DIR / "app.js", media_type="application/javascript")
+    return FileResponse(STATIC_DIR / "app.js", media_type="application/javascript", headers=NO_CACHE_HEADERS)
