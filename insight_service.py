@@ -10,14 +10,14 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 import json
 
-# Try to import InsightFlow (optional dependency)
+# Try to import InsightFlow (included in project)
 try:
-    from insightflow import InsightFlowClient, InsightFlowConfig, LLMProvider
-    from insightflow.llm.azure import AzureConfig
-    from insightflow.core.event import Event, EventType
+    from insightflow import InsightFlowClient, InsightFlowConfig, LLMProvider, AzureConfig, Event, EventType
     INSIGHTFLOW_AVAILABLE = True
-except ImportError:
+    print("InsightFlow module loaded successfully")
+except ImportError as e:
     INSIGHTFLOW_AVAILABLE = False
+    print(f"InsightFlow import failed: {e}")
 
 
 class InsightService:

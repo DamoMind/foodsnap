@@ -397,11 +397,15 @@ async def link_legacy_account(
 async def analyze(
     file: UploadFile = File(...),
     x_user_id: Optional[str] = Header(default=None),
+    x_lang: Optional[str] = Header(default="zh", alias="X-Lang"),
 ):
     user_id = _require_user_id(x_user_id)
 
     if ai is None:
         raise HTTPException(status_code=500, detail="AI vision service is not configured. Please set AZURE_OPENAI_API_KEY or AZURE_CLAUDE_API_KEY.")
+
+    # Validate language parameter
+    lang = x_lang if x_lang in ("zh", "en", "ja") else "zh"
 
     raw = await file.read()
     if len(raw) > settings.MAX_IMAGE_BYTES:
@@ -413,7 +417,7 @@ async def analyze(
         raise HTTPException(status_code=400, detail="invalid image")
 
     try:
-        ai_result = ai.analyze_food_image(jpeg, mime="image/jpeg")
+        ai_result = ai.analyze_food_image(jpeg, mime="image/jpeg", lang=lang)
     except AIServiceError as e:
         raise HTTPException(status_code=502, detail=str(e))
 
@@ -488,12 +492,64 @@ def stats_weekly(x_user_id: Optional[str] = Header(default=None)):
     return {"week_start": week_start.isoformat(), "days": series}
 
 
+@app.get("/api/user/profile")
+def get_profile(x_user_id: Optional[str] = Header(default=None)):
+    """Get user profile and goals for sync."""
+    user_id = _require_user_id(x_user_id)
+    goal = db.get_user_goal(user_id)
+    return {"user_id": user_id, "goal": goal}
+
+
 @app.post("/api/user/goal")
 def set_goal(payload: GoalSetIn, x_user_id: Optional[str] = Header(default=None)):
     user_id = _require_user_id(x_user_id)
     targets = nutrition.compute_targets(payload.goal_type, payload.profile)
     saved = db.upsert_user_goal(user_id, payload.goal_type, payload.profile, targets)
     return {"goal": saved}
+
+
+@app.get("/api/meals/sync")
+def get_meals_for_sync(
+    x_user_id: Optional[str] = Header(default=None),
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    limit: int = 100
+):
+    """Get meals for a date range (for cloud sync)."""
+    user_id = _require_user_id(x_user_id)
+
+    # Default to last 30 days if no dates specified
+    if not end_date:
+        end_date = _today_iso()
+    if not start_date:
+        from datetime import timedelta
+        start_date = (datetime.fromisoformat(end_date) - timedelta(days=30)).date().isoformat()
+
+    # Convert date to datetime range
+    start_iso = f"{start_date}T00:00:00"
+    end_iso = f"{end_date}T23:59:59"
+    meals = db.list_meals_in_range(user_id, start_iso, end_iso)[:limit]
+    return {"start_date": start_date, "end_date": end_date, "meals": meals, "count": len(meals)}
+
+
+@app.get("/api/activity/sync")
+def get_activity_for_sync(
+    x_user_id: Optional[str] = Header(default=None),
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None
+):
+    """Get activity data for a date range (for cloud sync)."""
+    user_id = _require_user_id(x_user_id)
+
+    # Default to last 30 days if no dates specified
+    if not end_date:
+        end_date = _today_iso()
+    if not start_date:
+        from datetime import timedelta
+        start_date = (datetime.fromisoformat(end_date) - timedelta(days=30)).date().isoformat()
+
+    activities = db.get_activities_in_range(user_id, start_date, end_date)
+    return {"start_date": start_date, "end_date": end_date, "activities": activities}
 
 
 @app.get("/api/recommendations")

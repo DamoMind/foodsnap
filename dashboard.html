@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#0ea5e9" />
-  <title>营养统计 - 本周</title>
+  <title data-i18n="dashStats">营养统计 - 本周</title>
   <link rel="stylesheet" href="./style.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <!-- Google tag (gtag.js) -->
@@ -22,8 +22,8 @@
       <span class="icon">←</span>
     </a>
     <div class="topbar__title">
-      <div class="brand">统计</div>
-      <div class="subtitle">本周趋势</div>
+      <div class="brand" data-i18n="dashStats">统计</div>
+      <div class="subtitle" data-i18n="dashWeekTrend">本周趋势</div>
     </div>
     <div style="width:40px"></div>
   </header>
@@ -31,25 +31,39 @@
   <main class="container">
     <section class="card">
       <div class="card__header">
-        <h2 class="card__title">今日宏量分布</h2>
-        <button class="text-btn" id="jumpTodayBtn">回到今日</button>
+        <h2 class="card__title" data-i18n="dashTodayMacro">今日宏量分布</h2>
+        <button class="text-btn" id="jumpTodayBtn" data-i18n="dashBackToToday">回到今日</button>
       </div>
       <canvas id="donutChart" height="220"></canvas>
-      <div class="hint" id="donutHint">按克数估算能量占比（P/C=4kcal/g，F=9kcal/g）。</div>
+      <div class="hint" id="donutHint" data-i18n="dashDonutHint">按克数估算能量占比（P/C=4kcal/g，F=9kcal/g）。</div>
     </section>
 
     <section class="card">
       <div class="card__header">
-        <h2 class="card__title">本周热量</h2>
+        <h2 class="card__title" data-i18n="dashWeeklyKcal">本周热量</h2>
       </div>
       <canvas id="kcalBarChart" height="220"></canvas>
     </section>
 
     <section class="card">
       <div class="card__header">
-        <h2 class="card__title">本周 P / C / F</h2>
+        <h2 class="card__title" data-i18n="dashWeeklyPCF">本周 P / C / F</h2>
       </div>
       <canvas id="pcfLineChart" height="240"></canvas>
+    </section>
+
+    <!-- AI Insights Section -->
+    <section class="card" id="insightsCard">
+      <div class="card__header">
+        <h2 class="card__title" id="insightsTitle" data-i18n="dashAiReport">AI 周报</h2>
+        <span class="badge" id="aiPoweredBadge" style="display:none">AI</span>
+      </div>
+      <div id="insightsContent">
+        <div class="insights-loading">
+          <span class="spinner"></span>
+          <span data-i18n="dashAnalyzing">正在分析...</span>
+        </div>
+      </div>
     </section>
   </main>
 

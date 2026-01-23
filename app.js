@@ -130,7 +130,41 @@
       memberSince: '注册时间',
       userProfile: '用户信息',
       linkLegacy: '关联本机数据',
-      linkLegacyHint: '将本机已有数据迁移到您的账号'
+      linkLegacyHint: '将本机已有数据迁移到您的账号',
+      // Dashboard
+      dashStats: '统计',
+      dashWeekTrend: '本周趋势',
+      dashTodayMacro: '今日宏量分布',
+      dashBackToToday: '回到今日',
+      dashWeeklyKcal: '本周热量',
+      dashWeeklyPCF: '本周 P / C / F',
+      dashAiReport: 'AI 周报',
+      dashAnalyzing: '正在分析...',
+      dashDonutHint: '按克数估算能量占比（P/C=4kcal/g，F=9kcal/g）。',
+      // Insights
+      insightsLoadFailed: '无法加载分析数据',
+      insightsNoData: '本周还没有记录，开始记录饮食来获取分析吧！',
+      insightsAiPowered: 'AI 分析',
+      insightsPatterns: '发现的模式',
+      insightsRecommendations: '建议',
+      insightsMealsCount: '记录',
+      insightsMealsUnit: '餐',
+      insightsConfidence: '置信度',
+      // Pattern labels
+      patternTrendUp: '上升趋势',
+      patternTrendDown: '下降趋势',
+      patternOverTarget: '超过目标',
+      patternUnderTarget: '低于目标',
+      patternLowProtein: '蛋白质不足',
+      patternIrregular: '不规律',
+      // Chart labels
+      chartProtein: '蛋白',
+      chartCarbs: '碳水',
+      chartFat: '脂肪',
+      chartTarget: '目标',
+      chartProteinG: '蛋白(g)',
+      chartCarbsG: '碳水(g)',
+      chartFatG: '脂肪(g)'
     },
     en: {
       title: 'FoodSnap - Today',
@@ -216,7 +250,41 @@
       memberSince: 'Member Since',
       userProfile: 'User Profile',
       linkLegacy: 'Link Device Data',
-      linkLegacyHint: 'Migrate existing device data to your account'
+      linkLegacyHint: 'Migrate existing device data to your account',
+      // Dashboard
+      dashStats: 'Statistics',
+      dashWeekTrend: "This Week's Trend",
+      dashTodayMacro: "Today's Macro Distribution",
+      dashBackToToday: 'Back to Today',
+      dashWeeklyKcal: 'Weekly Calories',
+      dashWeeklyPCF: 'Weekly P / C / F',
+      dashAiReport: 'AI Weekly Report',
+      dashAnalyzing: 'Analyzing...',
+      dashDonutHint: 'Energy distribution by gram (P/C=4kcal/g, F=9kcal/g).',
+      // Insights
+      insightsLoadFailed: 'Failed to load analysis',
+      insightsNoData: 'No records this week. Start tracking to get insights!',
+      insightsAiPowered: 'AI Analysis',
+      insightsPatterns: 'Patterns Found',
+      insightsRecommendations: 'Recommendations',
+      insightsMealsCount: '',
+      insightsMealsUnit: 'meals',
+      insightsConfidence: 'Confidence',
+      // Pattern labels
+      patternTrendUp: 'Trending Up',
+      patternTrendDown: 'Trending Down',
+      patternOverTarget: 'Over Target',
+      patternUnderTarget: 'Under Target',
+      patternLowProtein: 'Low Protein',
+      patternIrregular: 'Irregular',
+      // Chart labels
+      chartProtein: 'Protein',
+      chartCarbs: 'Carbs',
+      chartFat: 'Fat',
+      chartTarget: 'Target',
+      chartProteinG: 'Protein(g)',
+      chartCarbsG: 'Carbs(g)',
+      chartFatG: 'Fat(g)'
     },
     ja: {
       title: 'FoodSnap - 今日',
@@ -302,7 +370,41 @@
       memberSince: '登録日',
       userProfile: 'ユーザー情報',
       linkLegacy: '端末データを連携',
-      linkLegacyHint: '既存の端末データをアカウントに移行'
+      linkLegacyHint: '既存の端末データをアカウントに移行',
+      // Dashboard
+      dashStats: '統計',
+      dashWeekTrend: '今週のトレンド',
+      dashTodayMacro: '今日のマクロ分布',
+      dashBackToToday: '今日に戻る',
+      dashWeeklyKcal: '今週のカロリー',
+      dashWeeklyPCF: '今週の P / C / F',
+      dashAiReport: 'AI 週報',
+      dashAnalyzing: '分析中...',
+      dashDonutHint: 'グラムあたりのエネルギー配分（P/C=4kcal/g、F=9kcal/g）。',
+      // Insights
+      insightsLoadFailed: '分析データの読み込みに失敗しました',
+      insightsNoData: '今週はまだ記録がありません。記録を始めて分析を取得しましょう！',
+      insightsAiPowered: 'AI分析',
+      insightsPatterns: '発見されたパターン',
+      insightsRecommendations: 'おすすめ',
+      insightsMealsCount: '',
+      insightsMealsUnit: '食',
+      insightsConfidence: '信頼度',
+      // Pattern labels
+      patternTrendUp: '上昇傾向',
+      patternTrendDown: '下降傾向',
+      patternOverTarget: '目標超過',
+      patternUnderTarget: '目標未達',
+      patternLowProtein: 'タンパク質不足',
+      patternIrregular: '不規則',
+      // Chart labels
+      chartProtein: 'タンパク質',
+      chartCarbs: '炭水化物',
+      chartFat: '脂質',
+      chartTarget: '目標',
+      chartProteinG: 'タンパク質(g)',
+      chartCarbsG: '炭水化物(g)',
+      chartFatG: '脂質(g)'
     }
   };
 
@@ -622,7 +724,8 @@
       const response = await fetch('/api/analyze', {
         method: 'POST',
         headers: {
-          'X-User-Id': getUserId()
+          'X-User-Id': getUserId(),
+          'X-Lang': currentLang || 'zh'
         },
         body: formData
       });
@@ -855,30 +958,21 @@
         return;
       }
 
-      // Initialize Google Sign-In
-      const client = google.accounts.oauth2.initTokenClient({
-        client_id: window.GOOGLE_CLIENT_ID || '',
-        scope: 'openid email profile',
+      if (!window.GOOGLE_CLIENT_ID) {
+        showToast(currentLang === 'zh' ? 'Google 登录未配置' : 'Google Sign-In not configured');
+        return;
+      }
+
+      // Use Google Identity Services to get ID token
+      google.accounts.id.initialize({
+        client_id: window.GOOGLE_CLIENT_ID,
         callback: async (response) => {
-          if (response.error) {
-            console.error('Google auth error:', response.error);
-            showToast(currentLang === 'zh' ? '登录失败' : 'Login failed');
-            return;
-          }
-
           try {
-            // Get ID token using access token
-            const userInfoRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-              headers: { 'Authorization': `Bearer ${response.access_token}` }
-            });
-            const userInfo = await userInfoRes.json();
-
-            // For demo purposes, we'll create a pseudo-token
-            // In production, you'd exchange the access token for an ID token
+            // Send ID token to backend
             const authRes = await fetch(`${API_BASE}/api/auth/google`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ id_token: response.access_token })
+              body: JSON.stringify({ id_token: response.credential })
             });
 
             if (!authRes.ok) {
@@ -895,22 +989,55 @@
               await linkLegacyAccount(legacyUserId);
             }
 
-            showToast(currentLang === 'zh' ? '登录成功' : currentLang === 'ja' ? 'ログイン成功' : 'Login successful');
+            showToast(currentLang === 'zh' ? '登录成功，正在同步数据...' : currentLang === 'ja' ? 'ログイン成功、データ同期中...' : 'Login successful, syncing data...');
             setSheetOpen($('#authSheet'), false);
+
+            // 登录后从云端同步数据
+            syncFromCloud();
 
           } catch (err) {
             console.error('Google login error:', err);
-            showToast(currentLang === 'zh' ? '登录失败' : 'Login failed');
+            showToast(currentLang === 'zh' ? '登录失败: ' + err.message : 'Login failed: ' + err.message);
           }
         }
       });
 
-      client.requestAccessToken();
+      // Prompt the user to select a Google account
+      google.accounts.id.prompt((notification) => {
+        if (notification.isNotDisplayed()) {
+          // Fallback: use popup if prompt not displayed
+          console.log('One Tap not displayed, reason:', notification.getNotDisplayedReason());
+          showGoogleSignInPopup();
+        } else if (notification.isSkippedMoment()) {
+          console.log('One Tap skipped, reason:', notification.getSkippedReason());
+          showGoogleSignInPopup();
+        }
+      });
 
     } catch (err) {
       console.error('Google Sign-In error:', err);
       showToast(currentLang === 'zh' ? 'Google 登录不可用' : 'Google Sign-In unavailable');
     }
+  }
+
+  function showGoogleSignInPopup() {
+    // Fallback popup sign-in using OAuth 2.0 with ID token
+    const client = google.accounts.oauth2.initCodeClient({
+      client_id: window.GOOGLE_CLIENT_ID,
+      scope: 'openid email profile',
+      ux_mode: 'popup',
+      callback: async (response) => {
+        if (response.error) {
+          console.error('Google auth error:', response.error);
+          showToast(currentLang === 'zh' ? '登录失败' : 'Login failed');
+          return;
+        }
+        // For code flow, we'd need to exchange the code on backend
+        // For now, show a message that One Tap is required
+        showToast(currentLang === 'zh' ? '请允许 Google 弹出窗口' : 'Please allow Google popup');
+      }
+    });
+    client.requestCode();
   }
 
   async function linkLegacyAccount(legacyUserId) {
@@ -1080,6 +1207,12 @@
     // Initialize auth UI on load
     updateAuthUI();
 
+    // 如果已登录，启动时从云端同步数据
+    if (isLoggedIn()) {
+      console.log('User is logged in, starting cloud sync...');
+      syncFromCloud();
+    }
+
     // file inputs
     $('#cameraInput').addEventListener('change', onPickFile);
     $('#albumInput').addEventListener('change', onPickFile);
@@ -1239,6 +1372,8 @@
       gtmEvent('set_goal', { goal_type: p.goalType });
       setSheetOpen($('#profileSheet'), false);
       renderIndex();
+      // 同步到云端
+      syncProfileToCloud();
     });
 
     // open exercise sheet
@@ -1601,6 +1736,200 @@
     saveJSON('fs_pending_sync', stillPending);
   }
 
+  // ====== 云端同步（登录后从服务器加载数据） ======
+  async function syncFromCloud() {
+    if (!isLoggedIn()) return;
+
+    const userId = getUserId();
+    console.log('Starting cloud sync for user:', userId);
+
+    try {
+      // 并行获取所有数据
+      const [profileRes, mealsRes, activityRes] = await Promise.all([
+        fetch(`${API_BASE}/api/user/profile`, { headers: { 'X-User-Id': userId } }),
+        fetch(`${API_BASE}/api/meals/sync?limit=500`, { headers: { 'X-User-Id': userId } }),
+        fetch(`${API_BASE}/api/activity/sync`, { headers: { 'X-User-Id': userId } })
+      ]);
+
+      // 同步用户配置
+      if (profileRes.ok) {
+        const profileData = await profileRes.json();
+        if (profileData.goal) {
+          const serverProfile = profileData.goal.profile || {};
+          const serverTargets = profileData.goal.targets || {};
+          // 合并服务器配置到本地（服务器优先）
+          if (serverProfile.age || serverProfile.weight) {
+            State.profile = {
+              ...State.profile,
+              ...serverProfile,
+              goals: serverTargets.kcal ? {
+                kcal: Math.round(serverTargets.kcal),
+                p: Math.round(serverTargets.protein_g),
+                c: Math.round(serverTargets.carbs_g),
+                f: Math.round(serverTargets.fat_g)
+              } : State.profile.goals
+            };
+            saveJSON(LS_KEYS.profile, State.profile);
+            console.log('Profile synced from cloud');
+          }
+        }
+      }
+
+      // 同步餐食记录
+      if (mealsRes.ok) {
+        const mealsData = await mealsRes.json();
+        if (mealsData.meals && mealsData.meals.length > 0) {
+          mergeCloudMeals(mealsData.meals);
+          console.log(`Synced ${mealsData.meals.length} meals from cloud`);
+        }
+      }
+
+      // 同步运动数据
+      if (activityRes.ok) {
+        const activityData = await activityRes.json();
+        if (activityData.activities && activityData.activities.length > 0) {
+          mergeCloudActivity(activityData.activities);
+          console.log(`Synced ${activityData.activities.length} activity records from cloud`);
+        }
+      }
+
+      // 刷新UI
+      renderIndex();
+      showToast(currentLang === 'zh' ? '数据已同步' : 'Data synced');
+
+    } catch (err) {
+      console.warn('Cloud sync failed:', err);
+    }
+  }
+
+  function mergeCloudMeals(cloudMeals) {
+    const localLogs = State.logs;
+
+    for (const meal of cloudMeals) {
+      // 从 eaten_at 提取日期 key
+      const eatenAt = new Date(meal.eaten_at);
+      const dayKey = eatenAt.toISOString().slice(0, 10);
+
+      if (!localLogs[dayKey]) {
+        localLogs[dayKey] = [];
+      }
+
+      // 检查是否已存在（通过时间戳和meal_type匹配）
+      const existingIdx = localLogs[dayKey].findIndex(m =>
+        m.cloudId === meal.id ||
+        (Math.abs(new Date(m.createdAt).getTime() - eatenAt.getTime()) < 60000 && m.mealType === meal.meal_type)
+      );
+
+      const localMeal = {
+        cloudId: meal.id,
+        mealType: meal.meal_type,
+        createdAt: meal.eaten_at,
+        items: meal.items.map(item => ({
+          name: item.name,
+          portion_g: item.portion_g,
+          kcal: item.kcal,
+          protein_g: item.protein_g,
+          carbs_g: item.carbs_g,
+          fat_g: item.fat_g
+        })),
+        summary: meal.totals,
+        synced: true
+      };
+
+      if (existingIdx >= 0) {
+        // 更新已存在的记录
+        localLogs[dayKey][existingIdx] = { ...localLogs[dayKey][existingIdx], ...localMeal };
+      } else {
+        // 添加新记录
+        localLogs[dayKey].push(localMeal);
+      }
+    }
+
+    // 按时间排序每天的记录
+    for (const day of Object.keys(localLogs)) {
+      localLogs[day].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    }
+
+    State.logs = localLogs;
+    saveJSON(LS_KEYS.logs, localLogs);
+  }
+
+  function mergeCloudActivity(cloudActivities) {
+    const localExercise = State.exercise || {};
+
+    for (const activity of cloudActivities) {
+      const dayKey = activity.day_iso;
+      // 服务器数据优先（因为可能来自其他设备）
+      localExercise[dayKey] = {
+        exerciseKcal: activity.exercise_kcal,
+        steps: activity.steps,
+        activeMinutes: activity.active_minutes,
+        synced: true
+      };
+    }
+
+    State.exercise = localExercise;
+    saveJSON('fs_exercise_v1', localExercise);
+  }
+
+  // 同步本地配置到服务器
+  async function syncProfileToCloud() {
+    if (!isLoggedIn()) return;
+
+    const userId = getUserId();
+    const profile = State.profile;
+
+    try {
+      const res = await fetch(`${API_BASE}/api/user/goal`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Id': userId
+        },
+        body: JSON.stringify({
+          goal_type: profile.goal || 'maintain',
+          profile: {
+            age: profile.age,
+            gender: profile.gender,
+            height_cm: profile.height,
+            weight_kg: profile.weight,
+            activity_level: profile.activity || 'moderate'
+          }
+        })
+      });
+      if (res.ok) {
+        console.log('Profile synced to cloud');
+      }
+    } catch (err) {
+      console.warn('Failed to sync profile to cloud:', err);
+    }
+  }
+
+  // 同步运动数据到服务器
+  async function syncActivityToCloud(dayKey, activity) {
+    if (!isLoggedIn()) return;
+
+    const userId = getUserId();
+    try {
+      await fetch(`${API_BASE}/api/activity?day=${dayKey}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Id': userId
+        },
+        body: JSON.stringify({
+          exercise_kcal: activity.exerciseKcal || 0,
+          steps: activity.steps || 0,
+          active_minutes: activity.activeMinutes || 0,
+          source: 'manual'
+        })
+      });
+      console.log('Activity synced to cloud for', dayKey);
+    } catch (err) {
+      console.warn('Failed to sync activity to cloud:', err);
+    }
+  }
+
   function renderIndex() {
     const day = todayKey();
     const records = State.logs[day] || [];
@@ -1841,6 +2170,9 @@
 
   // ====== Dashboard ======
   function initDashboard() {
+    // Apply i18n first
+    applyI18n();
+
     const profile = loadJSON(LS_KEYS.profile, null) || defaultProfile();
     const logs = loadJSON(LS_KEYS.logs, {});
     const today = todayKey();
@@ -1859,7 +2191,7 @@
       new Chart(donutCtx, {
         type: 'doughnut',
         data: {
-          labels: ['蛋白', '碳水', '脂肪'],
+          labels: [t('chartProtein'), t('chartCarbs'), t('chartFat')],
           datasets: [{
             data: [pK, cK, fK],
             backgroundColor: ['#38bdf8', '#22c55e', '#fb7185'],
@@ -1918,7 +2250,7 @@
             borderWidth: 1
           }, {
             type: 'line',
-            label: '目标',
+            label: t('chartTarget'),
             data: days.map(() => profile.goals?.kcal ?? 2000),
             borderColor: 'rgba(255,255,255,.35)',
             borderDash: [6, 6],
@@ -1942,9 +2274,9 @@
         data: {
           labels: days,
           datasets: [
-            { label: '蛋白(g)', data: pSeries, borderColor: '#38bdf8', backgroundColor: 'rgba(56,189,248,.15)', tension: .35 },
-            { label: '碳水(g)', data: cSeries, borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,.12)', tension: .35 },
-            { label: '脂肪(g)', data: fSeries, borderColor: '#fb7185', backgroundColor: 'rgba(251,113,133,.12)', tension: .35 }
+            { label: t('chartProteinG'), data: pSeries, borderColor: '#38bdf8', backgroundColor: 'rgba(56,189,248,.15)', tension: .35 },
+            { label: t('chartCarbsG'), data: cSeries, borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,.12)', tension: .35 },
+            { label: t('chartFatG'), data: fSeries, borderColor: '#fb7185', backgroundColor: 'rgba(251,113,133,.12)', tension: .35 }
           ]
         },
         options: {
@@ -1956,6 +2288,150 @@
         }
       });
     }
+
+    // ====== AI Insights ======
+    loadWeeklyInsights();
+  }
+
+  async function loadWeeklyInsights() {
+    const insightsContent = document.getElementById('insightsContent');
+    const aiPoweredBadge = document.getElementById('aiPoweredBadge');
+    if (!insightsContent) return;
+
+    try {
+      const userId = getUserId();
+      const res = await fetch(`${API_BASE}/api/insights/weekly`, {
+        headers: { 'X-User-Id': userId }
+      });
+
+      if (!res.ok) throw new Error('Failed to fetch insights');
+
+      const data = await res.json();
+      renderInsights(data, insightsContent, aiPoweredBadge);
+    } catch (err) {
+      console.error('Failed to load insights:', err);
+      insightsContent.innerHTML = `
+        <div class="insights-empty">
+          <div class="insights-empty__icon">📊</div>
+          <div class="insights-empty__text">${t('insightsLoadFailed')}</div>
+        </div>
+      `;
+    }
+  }
+
+  function renderInsights(data, container, badge) {
+    const { insight, meals_count, week_start, week_end } = data;
+
+    if (!insight || meals_count === 0) {
+      container.innerHTML = `
+        <div class="insights-empty">
+          <div class="insights-empty__icon">📝</div>
+          <div class="insights-empty__text">${t('insightsNoData')}</div>
+        </div>
+      `;
+      return;
+    }
+
+    // Show AI badge if AI-powered
+    if (insight.ai_powered && badge) {
+      badge.style.display = 'inline-block';
+      badge.textContent = t('insightsAiPowered');
+    }
+
+    let html = '';
+
+    // Summary
+    if (insight.summary) {
+      html += `<div class="insights-summary">${escapeHtml(insight.summary)}</div>`;
+    }
+
+    // Patterns
+    if (insight.patterns && insight.patterns.length > 0) {
+      html += `<div class="insights-patterns">
+        <div class="insights-patterns__title">${t('insightsPatterns')}</div>`;
+
+      for (const pattern of insight.patterns) {
+        const iconClass = getPatternIconClass(pattern.type);
+        const icon = getPatternIcon(pattern.type);
+        html += `
+          <div class="pattern-item">
+            <div class="pattern-icon ${iconClass}">${icon}</div>
+            <div class="pattern-content">
+              <div class="pattern-type">${getPatternLabel(pattern.type)}</div>
+              <div class="pattern-desc">${escapeHtml(pattern.description)}</div>
+            </div>
+          </div>
+        `;
+      }
+      html += '</div>';
+    }
+
+    // Recommendations
+    if (insight.recommendations && insight.recommendations.length > 0) {
+      html += `<div class="insights-recommendations">
+        <div class="insights-recommendations__title">${t('insightsRecommendations')}</div>`;
+
+      for (const rec of insight.recommendations) {
+        html += `
+          <div class="recommendation-item">
+            <span class="recommendation-icon">💡</span>
+            <span class="recommendation-text">${escapeHtml(rec)}</span>
+          </div>
+        `;
+      }
+      html += '</div>';
+    }
+
+    // Footer with confidence
+    const mealsLabel = currentLang === 'zh'
+      ? `${t('insightsMealsCount')} ${meals_count} ${t('insightsMealsUnit')}`
+      : `${meals_count} ${t('insightsMealsUnit')}`;
+    html += `
+      <div class="insights-footer">
+        <span>${mealsLabel} · ${week_start} ~ ${week_end}</span>
+        <div class="insights-confidence">
+          <span>${t('insightsConfidence')}</span>
+          <div class="confidence-bar">
+            <div class="confidence-fill" style="width: ${(insight.confidence || 0.5) * 100}%"></div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    container.innerHTML = html;
+  }
+
+  function getPatternIconClass(type) {
+    if (type.includes('up') || type.includes('over')) return 'pattern-icon--up';
+    if (type.includes('down') || type.includes('under')) return 'pattern-icon--down';
+    if (type.includes('low') || type.includes('irregular')) return 'pattern-icon--warning';
+    return 'pattern-icon--info';
+  }
+
+  function getPatternIcon(type) {
+    if (type.includes('up') || type.includes('over')) return '📈';
+    if (type.includes('down') || type.includes('under')) return '📉';
+    if (type.includes('low')) return '⚠️';
+    if (type.includes('irregular')) return '🔄';
+    return 'ℹ️';
+  }
+
+  function getPatternLabel(type) {
+    const labelKeys = {
+      'trend_up': 'patternTrendUp',
+      'trend_down': 'patternTrendDown',
+      'over_target': 'patternOverTarget',
+      'under_target': 'patternUnderTarget',
+      'low_protein': 'patternLowProtein',
+      'irregular': 'patternIrregular'
+    };
+    return t(labelKeys[type]) || type;
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }
 
   // ====== Boot ======
