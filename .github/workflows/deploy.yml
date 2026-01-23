@@ -6,6 +6,9 @@ on:
       - main
   workflow_dispatch:
 
+env:
+  AZURE_WEBAPP_NAME: foodsnap-api
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -14,10 +17,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Add build timestamp to dashboard.html
+        run: |
+          BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          sed -i "s|<!-- v[0-9.]* - i18n support -->|<!-- v${{ github.sha }} deployed $BUILD_TIME -->|g" dashboard.html
+          echo "Build timestamp: $BUILD_TIME"
+          head -5 dashboard.html
+
       - name: Create deployment package
         run: |
-          # Add deployment marker with timestamp
-          echo "Deployed at $(date -u +%Y-%m-%dT%H:%M:%SZ) from commit ${{ github.sha }}" > DEPLOY_MARKER.txt
           zip -r deploy.zip . \
             -x "*.pyc" \
             -x "__pycache__/*" \
@@ -27,29 +35,46 @@ jobs:
             -x "cloudflare-deploy/*" \
             -x "*.db" \
             -x ".env"
-          # Show what's in the package for debugging
-          unzip -l deploy.zip | grep -E "(dashboard|main\.py|DEPLOY)" | head -10
 
-      - name: Deploy to Azure Web App
-        uses: azure/webapps-deploy@v3
-        with:
-          app-name: foodsnap-api
-          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-          package: deploy.zip
-          clean: true
-          restart: true
-        # Resource group: chatgpt
+      - name: Deploy using Kudu ZIP API
+        run: |
+          # Extract credentials from publish profile
+          PUBLISH_PROFILE='${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}'
+          USERNAME=$(echo "$PUBLISH_PROFILE" | grep -oP 'userName="\$[^"]*"' | head -1 | sed 's/userName="//;s/"//')
+          PASSWORD=$(echo "$PUBLISH_PROFILE" | grep -oP 'userPWD="[^"]*"' | head -1 | sed 's/userPWD="//;s/"//')
 
-      - name: Wait for deployment to propagate
-        run: sleep 30
+          echo "Deploying to Azure Web App: ${{ env.AZURE_WEBAPP_NAME }}"
+
+          # Use Kudu ZIP deploy API directly
+          curl -X POST \
+            "https://${{ env.AZURE_WEBAPP_NAME }}.scm.azurewebsites.net/api/zipdeploy" \
+            -u "${USERNAME}:${PASSWORD}" \
+            -H "Content-Type: application/zip" \
+            --data-binary @deploy.zip \
+            -w "\nHTTP Status: %{http_code}\n"
+
+      - name: Restart the app
+        run: |
+          PUBLISH_PROFILE='${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}'
+          USERNAME=$(echo "$PUBLISH_PROFILE" | grep -oP 'userName="\$[^"]*"' | head -1 | sed 's/userName="//;s/"//')
+          PASSWORD=$(echo "$PUBLISH_PROFILE" | grep -oP 'userPWD="[^"]*"' | head -1 | sed 's/userPWD="//;s/"//')
+
+          echo "Restarting app..."
+          curl -X POST \
+            "https://${{ env.AZURE_WEBAPP_NAME }}.scm.azurewebsites.net/api/app/restart" \
+            -u "${USERNAME}:${PASSWORD}" \
+            -w "\nHTTP Status: %{http_code}\n"
+
+      - name: Wait for app to restart
+        run: sleep 45
 
       - name: Verify deployment
         run: |
-          echo "Checking deployment marker..."
-          curl -s "https://foodsnap-api.azurewebsites.net/DEPLOY_MARKER.txt" || echo "Marker not found"
+          echo "=== Checking dashboard.html for build marker ==="
+          curl -s "https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net/dashboard.html" | head -5
           echo ""
-          echo "Checking dashboard.html for langToggle..."
-          curl -s "https://foodsnap-api.azurewebsites.net/dashboard.html" | grep -o "langToggle" || echo "langToggle NOT found"
+          echo "=== Checking for langToggle ==="
+          curl -s "https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net/dashboard.html" | grep -o "langToggle" || echo "langToggle NOT found"
           echo ""
-          echo "Checking API version..."
-          curl -s "https://foodsnap-api.azurewebsites.net/api/health"
+          echo "=== API health ==="
+          curl -s "https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net/api/health"
