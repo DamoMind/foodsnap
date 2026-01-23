@@ -1821,18 +1821,31 @@
       );
 
       const localMeal = {
+        id: `cloud_${meal.id}`,  // Local id for view/edit (prefixed to avoid collision)
         cloudId: meal.id,
         mealType: meal.meal_type,
         createdAt: meal.eaten_at,
         items: meal.items.map(item => ({
+          id: cryptoRandomId(),  // Each item needs an id for editing
           name: item.name,
           portion_g: item.portion_g,
           kcal: item.kcal,
           protein_g: item.protein_g,
           carbs_g: item.carbs_g,
-          fat_g: item.fat_g
+          fat_g: item.fat_g,
+          per100: {
+            kcal: item.kcal ? Math.round((item.kcal / (item.portion_g || 100)) * 100) : 100,
+            p: item.protein_g ? Math.round((item.protein_g / (item.portion_g || 100)) * 100) : 5,
+            c: item.carbs_g ? Math.round((item.carbs_g / (item.portion_g || 100)) * 100) : 15,
+            f: item.fat_g ? Math.round((item.fat_g / (item.portion_g || 100)) * 100) : 5
+          }
         })),
-        summary: meal.totals,
+        summary: meal.totals ? {
+          kcal: meal.totals.kcal || 0,
+          p: meal.totals.protein_g || 0,
+          c: meal.totals.carbs_g || 0,
+          f: meal.totals.fat_g || 0
+        } : { kcal: 0, p: 0, c: 0, f: 0 },
         synced: true
       };
 
