@@ -2186,6 +2186,16 @@
     // Apply i18n first
     applyI18n();
 
+    // Language toggle for dashboard
+    const langBtn = $('#langToggle');
+    if (langBtn) {
+      langBtn.addEventListener('click', () => {
+        toggleLang();
+        // Re-render charts with new language labels
+        location.reload();
+      });
+    }
+
     const profile = loadJSON(LS_KEYS.profile, null) || defaultProfile();
     const logs = loadJSON(LS_KEYS.logs, {});
     const today = todayKey();
