@@ -284,6 +284,10 @@ class Database:
         }
 
     # ---------- Nutrition DB ----------
+    def _escape_like_pattern(self, pattern: str) -> str:
+        """Escape special characters in LIKE pattern to prevent injection."""
+        return pattern.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
     def find_food_by_name(self, name: str) -> Optional[Dict[str, Any]]:
         """
         简化匹配：先 canonical 精确，再 aliases 包含匹配（JSON LIKE）。
@@ -299,10 +303,11 @@ class Database:
             if row:
                 return self._row_to_food(row)
 
-            # aliases_json contains name
+            # aliases_json contains name (escape special LIKE characters)
+            escaped_name = self._escape_like_pattern(name)
             row = conn.execute(
-                "SELECT * FROM food_nutrition WHERE aliases_json LIKE ? LIMIT 1;",
-                (f"%{name}%",),
+                "SELECT * FROM food_nutrition WHERE aliases_json LIKE ? ESCAPE '\\' LIMIT 1;",
+                (f"%{escaped_name}%",),
             ).fetchone()
             if row:
                 return self._row_to_food(row)

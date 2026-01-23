@@ -3,7 +3,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -11,6 +11,16 @@ from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings
 from PIL import Image
 import io
+
+# Rate limiting
+try:
+    from slowapi import Limiter, _rate_limit_exceeded_handler
+    from slowapi.util import get_remote_address
+    from slowapi.errors import RateLimitExceeded
+    RATE_LIMIT_AVAILABLE = True
+except ImportError:
+    RATE_LIMIT_AVAILABLE = False
+    print("Warning: slowapi not available, rate limiting disabled")
 
 from ai_service import AzureOpenAIVisionService, AzureClaudeVisionService, AIServiceError
 from database import Database
@@ -53,7 +63,7 @@ class Settings(BaseSettings):
     # Authentication
     JWT_SECRET: str = ""  # Required for auth - generate with: python -c "import secrets; print(secrets.token_urlsafe(32))"
     JWT_ALGORITHM: str = "HS256"
-    JWT_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
+    JWT_EXPIRE_MINUTES: int = 60 * 24  # 24 hours (shorter for security)
     GOOGLE_CLIENT_ID: str = ""
     APPLE_CLIENT_ID: str = ""  # Bundle ID, e.g., "com.yourapp.foodsnap"
 
@@ -132,12 +142,28 @@ ai = _create_vision_service()
 
 app = FastAPI(title="Food AI Nutrition API", version="0.1.0")
 
+# Rate limiting for auth endpoints
+if RATE_LIMIT_AVAILABLE:
+    limiter = Limiter(key_func=get_remote_address)
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+else:
+    limiter = None
+
+# CORS: Allow specific origins only
+ALLOWED_ORIGINS = [
+    "https://foodsnap.duku.app",
+    "https://foodsnap.azurewebsites.net",
+    "http://localhost:8000",  # Local development
+    "http://127.0.0.1:8000",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # MVP: tighten in production
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-User-Id", "X-Lang"],
 )
 
 
@@ -260,8 +286,17 @@ def health():
 
 
 # ----------------- Authentication Routes -----------------
+# Rate limit decorator helper
+def rate_limit(limit_string: str):
+    """Apply rate limiting if available, otherwise no-op decorator."""
+    if limiter:
+        return limiter.limit(limit_string)
+    return lambda f: f
+
+
 @app.post("/api/auth/google", response_model=AuthResponse)
-async def auth_google(payload: GoogleAuthIn):
+@rate_limit("5/minute")  # 5 attempts per minute per IP
+async def auth_google(request: Request, payload: GoogleAuthIn):
     """Authenticate with Google OAuth."""
     if not auth:
         raise HTTPException(status_code=501, detail="Authentication not configured")
@@ -299,7 +334,8 @@ async def auth_google(payload: GoogleAuthIn):
 
 
 @app.post("/api/auth/apple", response_model=AuthResponse)
-async def auth_apple(payload: AppleAuthIn):
+@rate_limit("5/minute")  # 5 attempts per minute per IP
+async def auth_apple(request: Request, payload: AppleAuthIn):
     """Authenticate with Apple OAuth."""
     if not auth:
         raise HTTPException(status_code=501, detail="Authentication not configured")
@@ -363,7 +399,9 @@ async def get_current_user(authorization: Optional[str] = Header(default=None)):
 
 
 @app.post("/api/auth/link-legacy")
+@rate_limit("10/minute")  # 10 attempts per minute per IP
 async def link_legacy_account(
+    request: Request,
     authorization: Optional[str] = Header(default=None),
     x_user_id: Optional[str] = Header(default=None)
 ):
@@ -398,8 +436,9 @@ async def analyze(
     file: UploadFile = File(...),
     x_user_id: Optional[str] = Header(default=None),
     x_lang: Optional[str] = Header(default="zh", alias="X-Lang"),
+    authorization: Optional[str] = Header(default=None),
 ):
-    user_id = _require_user_id(x_user_id)
+    user_id = _require_user_id_with_auth(x_user_id, authorization)
 
     if ai is None:
         raise HTTPException(status_code=500, detail="AI vision service is not configured. Please set AZURE_OPENAI_API_KEY or AZURE_CLAUDE_API_KEY.")
@@ -427,15 +466,23 @@ async def analyze(
 
 
 @app.get("/api/meals")
-def get_today_meals(x_user_id: Optional[str] = Header(default=None), day: Optional[str] = None):
-    user_id = _require_user_id(x_user_id)
+def get_today_meals(
+    x_user_id: Optional[str] = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
+    day: Optional[str] = None
+):
+    user_id = _require_user_id_with_auth(x_user_id, authorization)
     meals = db.list_meals_by_date(user_id, day_iso=day)
     return {"day": day or _today_iso(), "meals": meals}
 
 
 @app.post("/api/meals")
-def create_meal(payload: MealCreateIn, x_user_id: Optional[str] = Header(default=None)):
-    user_id = _require_user_id(x_user_id)
+def create_meal(
+    payload: MealCreateIn,
+    x_user_id: Optional[str] = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
+):
+    user_id = _require_user_id_with_auth(x_user_id, authorization)
     eaten_at = payload.eaten_at or _iso_now_local()
 
     meal = db.create_meal(
@@ -450,9 +497,13 @@ def create_meal(payload: MealCreateIn, x_user_id: Optional[str] = Header(default
 
 
 @app.get("/api/stats/daily")
-def stats_daily(x_user_id: Optional[str] = Header(default=None), day: Optional[str] = None):
+def stats_daily(
+    x_user_id: Optional[str] = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
+    day: Optional[str] = None
+):
     """Daily stats including activity and net calories."""
-    user_id = _require_user_id(x_user_id)
+    user_id = _require_user_id_with_auth(x_user_id, authorization)
     day_iso = day or _today_iso()
 
     meals = db.list_meals_by_date(user_id, day_iso=day_iso)
@@ -475,8 +526,11 @@ def stats_daily(x_user_id: Optional[str] = Header(default=None), day: Optional[s
 
 
 @app.get("/api/stats/weekly")
-def stats_weekly(x_user_id: Optional[str] = Header(default=None)):
-    user_id = _require_user_id(x_user_id)
+def stats_weekly(
+    x_user_id: Optional[str] = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
+):
+    user_id = _require_user_id_with_auth(x_user_id, authorization)
 
     # week range (local)
     today = date.today()
@@ -493,16 +547,23 @@ def stats_weekly(x_user_id: Optional[str] = Header(default=None)):
 
 
 @app.get("/api/user/profile")
-def get_profile(x_user_id: Optional[str] = Header(default=None)):
+def get_profile(
+    x_user_id: Optional[str] = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
+):
     """Get user profile and goals for sync."""
-    user_id = _require_user_id(x_user_id)
+    user_id = _require_user_id_with_auth(x_user_id, authorization)
     goal = db.get_user_goal(user_id)
     return {"user_id": user_id, "goal": goal}
 
 
 @app.post("/api/user/goal")
-def set_goal(payload: GoalSetIn, x_user_id: Optional[str] = Header(default=None)):
-    user_id = _require_user_id(x_user_id)
+def set_goal(
+    payload: GoalSetIn,
+    x_user_id: Optional[str] = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
+):
+    user_id = _require_user_id_with_auth(x_user_id, authorization)
     targets = nutrition.compute_targets(payload.goal_type, payload.profile)
     saved = db.upsert_user_goal(user_id, payload.goal_type, payload.profile, targets)
     return {"goal": saved}
@@ -511,12 +572,13 @@ def set_goal(payload: GoalSetIn, x_user_id: Optional[str] = Header(default=None)
 @app.get("/api/meals/sync")
 def get_meals_for_sync(
     x_user_id: Optional[str] = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     limit: int = 100
 ):
     """Get meals for a date range (for cloud sync)."""
-    user_id = _require_user_id(x_user_id)
+    user_id = _require_user_id_with_auth(x_user_id, authorization)
 
     # Default to last 30 days if no dates specified
     if not end_date:
@@ -535,11 +597,12 @@ def get_meals_for_sync(
 @app.get("/api/activity/sync")
 def get_activity_for_sync(
     x_user_id: Optional[str] = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
     start_date: Optional[str] = None,
     end_date: Optional[str] = None
 ):
     """Get activity data for a date range (for cloud sync)."""
-    user_id = _require_user_id(x_user_id)
+    user_id = _require_user_id_with_auth(x_user_id, authorization)
 
     # Default to last 30 days if no dates specified
     if not end_date:
@@ -553,8 +616,11 @@ def get_activity_for_sync(
 
 
 @app.get("/api/recommendations")
-def recommendations(x_user_id: Optional[str] = Header(default=None)):
-    user_id = _require_user_id(x_user_id)
+def recommendations(
+    x_user_id: Optional[str] = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
+):
+    user_id = _require_user_id_with_auth(x_user_id, authorization)
     meals = db.list_meals_by_date(user_id, day_iso=_today_iso())
     totals = nutrition.aggregate_totals(meals)
     goal = db.get_user_goal(user_id)
@@ -567,10 +633,11 @@ def recommendations(x_user_id: Optional[str] = Header(default=None)):
 def save_activity(
     payload: ActivityIn,
     x_user_id: Optional[str] = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
     day: Optional[str] = None
 ):
     """Save daily activity/exercise data."""
-    user_id = _require_user_id(x_user_id)
+    user_id = _require_user_id_with_auth(x_user_id, authorization)
     day_iso = day or _today_iso()
 
     activity = db.upsert_activity(
@@ -587,10 +654,11 @@ def save_activity(
 @app.get("/api/activity")
 def get_activity(
     x_user_id: Optional[str] = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
     day: Optional[str] = None
 ):
     """Get activity data for a specific day."""
-    user_id = _require_user_id(x_user_id)
+    user_id = _require_user_id_with_auth(x_user_id, authorization)
     day_iso = day or _today_iso()
 
     activity = db.get_activity(user_id, day_iso)
@@ -615,9 +683,12 @@ def _get_insight_service():
 
 
 @app.get("/api/insights/weekly")
-async def weekly_insights(x_user_id: Optional[str] = Header(default=None)):
+async def weekly_insights(
+    x_user_id: Optional[str] = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
+):
     """Get AI-powered weekly nutrition insights."""
-    user_id = _require_user_id(x_user_id)
+    user_id = _require_user_id_with_auth(x_user_id, authorization)
 
     # Get week's meals
     today = date.today()
