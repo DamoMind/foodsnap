@@ -25,8 +25,8 @@ jobs:
             -x "cloudflare-deploy/*" \
             -x "*.db" \
             -x ".env"
-          echo "Package contents (relevant files):"
-          unzip -l deploy.zip | grep -E "(dashboard|main\.py|app\.js)" | head -10
+          echo "=== Package size ===" && ls -lh deploy.zip
+          echo "=== Key files in package ===" && unzip -l deploy.zip | grep -E "(dashboard|main\.py|app\.js)"
 
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
@@ -34,19 +34,20 @@ jobs:
           app-name: foodsnap-api
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
           package: deploy.zip
-          type: zip
         # Resource group: chatgpt
 
-      - name: Wait for deployment
-        run: sleep 60
+      - name: Wait for deployment to complete
+        run: |
+          echo "Waiting 90 seconds for deployment..."
+          sleep 90
 
       - name: Verify deployment
         run: |
-          echo "=== Checking dashboard.html ==="
-          curl -s "https://foodsnap-api.azurewebsites.net/dashboard.html" | head -10
+          echo "=== Dashboard HTML (first 15 lines) ==="
+          curl -s "https://foodsnap-api.azurewebsites.net/dashboard.html" | head -15
           echo ""
-          echo "=== Checking for langToggle ==="
-          curl -s "https://foodsnap-api.azurewebsites.net/dashboard.html" | grep -o "langToggle" || echo "langToggle NOT found"
+          echo "=== langToggle check ==="
+          curl -s "https://foodsnap-api.azurewebsites.net/dashboard.html" | grep -c "langToggle" && echo "FOUND!" || echo "NOT found"
           echo ""
           echo "=== API health ==="
           curl -s "https://foodsnap-api.azurewebsites.net/api/health"
