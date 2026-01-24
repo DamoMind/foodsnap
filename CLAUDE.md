@@ -78,3 +78,4 @@ All endpoints accept `X-User-Id` header for user isolation.
 - Frontend stores meal data in localStorage with image data URLs (auto-cleans images older than 7 days)
 - Nutrition values are calculated per-portion from per-100g values
 - The frontend generates unique user IDs client-side for data isolation
+# Deployed: 2026-01-24T14:22:08Z
