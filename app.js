@@ -1744,11 +1744,12 @@
     console.log('Starting cloud sync for user:', userId);
 
     try {
-      // 并行获取所有数据
+      // 并行获取所有数据（使用 JWT 认证）
+      const authHeaders = getAuthHeaders();
       const [profileRes, mealsRes, activityRes] = await Promise.all([
-        fetch(`${API_BASE}/api/user/profile`, { headers: { 'X-User-Id': userId } }),
-        fetch(`${API_BASE}/api/meals/sync?limit=500`, { headers: { 'X-User-Id': userId } }),
-        fetch(`${API_BASE}/api/activity/sync`, { headers: { 'X-User-Id': userId } })
+        fetch(`${API_BASE}/api/user/profile`, { headers: authHeaders }),
+        fetch(`${API_BASE}/api/meals/sync?limit=500`, { headers: authHeaders }),
+        fetch(`${API_BASE}/api/activity/sync`, { headers: authHeaders })
       ]);
 
       // 同步用户配置
@@ -1889,7 +1890,6 @@
   async function syncProfileToCloud() {
     if (!isLoggedIn()) return;
 
-    const userId = getUserId();
     const profile = State.profile;
 
     try {
@@ -1897,10 +1897,10 @@
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-User-Id': userId
+          ...getAuthHeaders()
         },
         body: JSON.stringify({
-          goal_type: profile.goal || 'maintain',
+          goal_type: profile.goalType || 'maintain',
           profile: {
             age: profile.age,
             gender: profile.gender,
@@ -1912,6 +1912,8 @@
       });
       if (res.ok) {
         console.log('Profile synced to cloud');
+      } else {
+        console.warn('Profile sync failed:', res.status);
       }
     } catch (err) {
       console.warn('Failed to sync profile to cloud:', err);
@@ -1922,13 +1924,12 @@
   async function syncActivityToCloud(dayKey, activity) {
     if (!isLoggedIn()) return;
 
-    const userId = getUserId();
     try {
       await fetch(`${API_BASE}/api/activity?day=${dayKey}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-User-Id': userId
+          ...getAuthHeaders()
         },
         body: JSON.stringify({
           exercise_kcal: activity.exerciseKcal || 0,
@@ -2146,10 +2147,9 @@
   }
 
   async function loadExerciseFromAPI() {
-    const userId = getUserId();
     try {
       const res = await fetch(`${API_BASE}/api/activity?day=${todayKey()}`, {
-        headers: { 'X-User-Id': userId }
+        headers: getAuthHeaders()
       });
       if (!res.ok) return null;
       const data = await res.json();
@@ -2322,9 +2322,8 @@
     if (!insightsContent) return;
 
     try {
-      const userId = getUserId();
       const res = await fetch(`${API_BASE}/api/insights/weekly`, {
-        headers: { 'X-User-Id': userId }
+        headers: getAuthHeaders()
       });
 
       if (!res.ok) throw new Error('Failed to fetch insights');
