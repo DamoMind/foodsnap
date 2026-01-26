@@ -512,18 +512,51 @@
     }
   }
   function saveJSON(key, value) {
+    // 检测是否为 Safari 隐私模式（localStorage 可能不可用）
+    try {
+      localStorage.setItem('__test__', '1');
+      localStorage.removeItem('__test__');
+    } catch (e) {
+      console.error('localStorage not available (private browsing mode?)');
+      throw new Error('STORAGE_UNAVAILABLE');
+    }
+
     try {
       localStorage.setItem(key, JSON.stringify(value));
     } catch (e) {
-      // localStorage 可能已满，尝试清理旧图片后重试
+      // localStorage 可能已满，尝试渐进式清理
       if (e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014) {
-        console.warn('localStorage quota exceeded, cleaning old images...');
-        cleanOldImages(value);
-        try {
-          localStorage.setItem(key, JSON.stringify(value));
-        } catch (e2) {
-          console.error('Save failed even after cleanup:', e2);
-          throw e2;
+        console.warn('localStorage quota exceeded, attempting progressive cleanup...');
+        
+        // 渐进式清理：先清理7天前，不够再清理3天前，最后清理1天前
+        const cleanupDays = [7, 3, 1, 0]; // 0 = 清理所有图片包括今天
+        let saved = false;
+        
+        for (const days of cleanupDays) {
+          try {
+            // 同时清理已存储的数据和待保存的数据
+            cleanStoredImages(days);
+            cleanOldImages(value, days);
+            localStorage.setItem(key, JSON.stringify(value));
+            saved = true;
+            console.log(`Saved successfully after cleaning images older than ${days} days`);
+            break;
+          } catch (e2) {
+            console.warn(`Still failed after ${days}-day cleanup, trying more aggressive...`);
+          }
+        }
+        
+        if (!saved) {
+          // 最后尝试：清理所有其他非关键数据
+          try {
+            cleanNonEssentialData();
+            localStorage.setItem(key, JSON.stringify(value));
+            saved = true;
+            console.log('Saved after cleaning non-essential data');
+          } catch (e3) {
+            console.error('Save failed even after aggressive cleanup:', e3);
+            throw new Error('STORAGE_FULL');
+          }
         }
       } else {
         throw e;
@@ -531,16 +564,57 @@
     }
   }
 
+  // 清理 localStorage 中已存储的日志图片
+  function cleanStoredImages(daysToKeep) {
+    try {
+      const stored = localStorage.getItem(LS_KEYS.logs);
+      if (!stored) return;
+      
+      const logs = JSON.parse(stored);
+      let cleaned = false;
+      
+      cleanOldImages(logs, daysToKeep);
+      
+      // 检查是否有变化
+      const newStored = JSON.stringify(logs);
+      if (newStored.length < stored.length) {
+        localStorage.setItem(LS_KEYS.logs, newStored);
+        cleaned = true;
+        console.log(`Cleaned stored images, freed ${stored.length - newStored.length} bytes`);
+      }
+      
+      return cleaned;
+    } catch (e) {
+      console.warn('Failed to clean stored images:', e);
+    }
+  }
+
+  // 清理非关键数据
+  function cleanNonEssentialData() {
+    const nonEssentialKeys = ['fs_pending_sync', 'fs_exercise_v1'];
+    nonEssentialKeys.forEach(key => {
+      try {
+        const data = localStorage.getItem(key);
+        if (data && data.length > 1000) {
+          localStorage.removeItem(key);
+          console.log(`Removed ${key} to free space`);
+        }
+      } catch (e) {}
+    });
+  }
+
   // 清理旧记录中的图片数据以节省空间
-  function cleanOldImages(logs) {
+  function cleanOldImages(logs, daysToKeep = 7) {
     if (!logs || typeof logs !== 'object') return;
     const today = todayKey();
+    const todayDate = new Date(today);
+    
     Object.keys(logs).forEach(day => {
-      // 保留今天的图片，清理7天前的
       const dayDate = new Date(day);
-      const todayDate = new Date(today);
       const diffDays = (todayDate - dayDate) / (1000 * 60 * 60 * 24);
-      if (diffDays > 7 && Array.isArray(logs[day])) {
+      
+      // 清理超过指定天数的图片
+      if (diffDays > daysToKeep && Array.isArray(logs[day])) {
         logs[day].forEach(meal => {
           if (meal.imageDataUrl) {
             meal.imageDataUrl = null; // 清除旧图片
@@ -1304,7 +1378,19 @@
         }
       } catch (err) {
         console.error('Save error:', err);
-        showToast(currentLang === 'zh' ? '保存失败，请重试' : 'Save failed, please retry');
+        let msg;
+        if (err.message === 'STORAGE_UNAVAILABLE') {
+          msg = currentLang === 'zh' 
+            ? '无法保存：请关闭隐私浏览模式' 
+            : 'Cannot save: Please disable private browsing';
+        } else if (err.message === 'STORAGE_FULL') {
+          msg = currentLang === 'zh' 
+            ? '存储空间已满，请在设置中清理数据' 
+            : 'Storage full, please clear data in settings';
+        } else {
+          msg = currentLang === 'zh' ? '保存失败，请重试' : 'Save failed, please retry';
+        }
+        showToast(msg);
         resetSaveButtons();
         isSaving = false;
       }
@@ -1403,7 +1489,19 @@
         renderIndex();
       } catch (err) {
         console.error('Save exercise error:', err);
-        showToast(currentLang === 'zh' ? '保存失败' : 'Save failed');
+        let msg;
+        if (err.message === 'STORAGE_UNAVAILABLE') {
+          msg = currentLang === 'zh' 
+            ? '无法保存：请关闭隐私浏览模式' 
+            : 'Cannot save: Please disable private browsing';
+        } else if (err.message === 'STORAGE_FULL') {
+          msg = currentLang === 'zh' 
+            ? '存储空间已满，请清理数据' 
+            : 'Storage full, please clear data';
+        } else {
+          msg = currentLang === 'zh' ? '保存失败，请重试' : 'Save failed, please retry';
+        }
+        showToast(msg);
       }
     });
 
