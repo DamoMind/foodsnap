@@ -2034,7 +2034,7 @@
     });
 
     // actions delegation - with protection against double-click
-    listEl.onclick = (e) => {
+    listEl.onclick = async (e) => {
       const del = e.target.closest('button[data-delmeal]');
       const view = e.target.closest('button[data-view]');
       if (del) {
