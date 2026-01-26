@@ -724,7 +724,7 @@
       const response = await fetch('/api/analyze', {
         method: 'POST',
         headers: {
-          'X-User-Id': getUserId(),
+          ...getAuthHeaders(),
           'X-Lang': currentLang || 'zh'
         },
         body: formData
@@ -1678,13 +1678,12 @@
 
   // ====== 后端同步函数 ======
   async function syncMealToBackend(meal) {
-    const userId = getUserId();
     try {
       const res = await fetch(`${API_BASE}/api/meals`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-User-Id': userId
+          ...getAuthHeaders()
         },
         body: JSON.stringify({
           meal_type: meal.mealType,
@@ -2165,13 +2164,12 @@
   }
 
   async function saveExerciseToAPI({ exerciseKcal, steps, activeMinutes }) {
-    const userId = getUserId();
     try {
       const res = await fetch(`${API_BASE}/api/activity`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-User-Id': userId
+          ...getAuthHeaders()
         },
         body: JSON.stringify({
           exercise_kcal: exerciseKcal,
