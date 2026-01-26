@@ -1904,6 +1904,16 @@
 
     const profile = State.profile;
 
+    // 将数字活动系数转换为字符串
+    const activityToString = (val) => {
+      const num = parseFloat(val);
+      if (num <= 1.2) return 'sedentary';
+      if (num <= 1.375) return 'light';
+      if (num <= 1.55) return 'moderate';
+      if (num <= 1.725) return 'active';
+      return 'very_active';
+    };
+
     try {
       const res = await fetch(`${API_BASE}/api/user/goal`, {
         method: 'POST',
@@ -1918,7 +1928,7 @@
             gender: profile.gender,
             height_cm: profile.height,
             weight_kg: profile.weight,
-            activity_level: profile.activity || 'moderate'
+            activity_level: activityToString(profile.activity)
           }
         })
       });
