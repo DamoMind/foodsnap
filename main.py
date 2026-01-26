@@ -496,6 +496,20 @@ def create_meal(
     return {"meal": meal}
 
 
+@app.delete("/api/meals/{meal_id}")
+def delete_meal(
+    meal_id: int,
+    x_user_id: Optional[str] = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
+):
+    """Delete a meal by ID."""
+    user_id = _require_user_id_with_auth(x_user_id, authorization)
+    deleted = db.delete_meal(user_id, meal_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Meal not found")
+    return {"deleted": True, "meal_id": meal_id}
+
+
 @app.get("/api/stats/daily")
 def stats_daily(
     x_user_id: Optional[str] = Header(default=None),

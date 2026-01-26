@@ -283,6 +283,16 @@ class Database:
             "updated_at": row["updated_at"],
         }
 
+    def delete_meal(self, user_id: str, meal_id: int) -> bool:
+        """Delete a meal by ID. Returns True if deleted, False if not found."""
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "DELETE FROM meals WHERE id=? AND user_id=?",
+                (meal_id, user_id)
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+
     # ---------- Nutrition DB ----------
     def _escape_like_pattern(self, pattern: str) -> str:
         """Escape special characters in LIKE pattern to prevent injection."""

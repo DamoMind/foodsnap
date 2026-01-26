@@ -2051,14 +2051,34 @@
         del.textContent = currentLang === 'zh' ? '删除中...' : 'Deleting...';
 
         try {
-          // Find and remove only the FIRST matching record (safety measure)
-          const arr = [...(State.logs[day] || [])];  // 创建副本
+          // Find the record to delete
+          const arr = [...(State.logs[day] || [])];
           const idx = arr.findIndex(x => x.id === id);
+
           if (idx >= 0) {
+            const meal = arr[idx];
+
+            // If meal has cloudId, delete from server first
+            if (meal.cloudId && isLoggedIn()) {
+              try {
+                const res = await fetch(`${API_BASE}/api/meals/${meal.cloudId}`, {
+                  method: 'DELETE',
+                  headers: getAuthHeaders()
+                });
+                if (!res.ok && res.status !== 404) {
+                  console.warn('Cloud delete failed:', res.status);
+                }
+              } catch (cloudErr) {
+                console.warn('Cloud delete error:', cloudErr);
+                // Continue with local delete even if cloud fails
+              }
+            }
+
+            // Delete locally
             arr.splice(idx, 1);
             const newLogs = { ...State.logs, [day]: arr };
-            saveJSON(LS_KEYS.logs, newLogs);  // 先保存，失败会抛异常
-            State.logs = newLogs;  // 保存成功后更新内存
+            saveJSON(LS_KEYS.logs, newLogs);
+            State.logs = newLogs;
             gtmEvent('delete_meal');
             showToast(currentLang === 'zh' ? '已删除' : 'Deleted');
           } else {
