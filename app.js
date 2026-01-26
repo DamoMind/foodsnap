@@ -1758,11 +1758,23 @@
         if (profileData.goal) {
           const serverProfile = profileData.goal.profile || {};
           const serverTargets = profileData.goal.targets || {};
+          const serverGoalType = profileData.goal.goal_type;
+
+          // 转换服务器字段名到客户端格式
+          const activityMap = { sedentary: 1.2, light: 1.375, moderate: 1.55, active: 1.725, very_active: 1.9 };
+
           // 合并服务器配置到本地（服务器优先）
-          if (serverProfile.age || serverProfile.weight) {
+          if (serverProfile.age || serverProfile.weight_kg) {
             State.profile = {
               ...State.profile,
-              ...serverProfile,
+              // 映射服务器字段到客户端字段
+              age: serverProfile.age || State.profile.age,
+              gender: serverProfile.gender || State.profile.gender,
+              height: serverProfile.height_cm || State.profile.height,
+              weight: serverProfile.weight_kg || State.profile.weight,
+              activity: activityMap[serverProfile.activity_level] || State.profile.activity,
+              goalType: serverGoalType || State.profile.goalType,
+              // 设置目标营养值
               goals: serverTargets.kcal ? {
                 kcal: Math.round(serverTargets.kcal),
                 p: Math.round(serverTargets.protein_g),
@@ -1771,7 +1783,7 @@
               } : State.profile.goals
             };
             saveJSON(LS_KEYS.profile, State.profile);
-            console.log('Profile synced from cloud');
+            console.log('Profile synced from cloud:', State.profile.goals);
           }
         }
       }
