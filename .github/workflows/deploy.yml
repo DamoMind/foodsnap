@@ -1,14 +1,10 @@
-name: Deploy to Azure Web App
+name: Deploy to Cloudflare Workers
 
 on:
   push:
     branches:
       - main
   workflow_dispatch:
-
-env:
-  AZURE_WEBAPP_NAME: foodsnap-api
-  RESOURCE_GROUP: chatgpt
 
 jobs:
   deploy:
@@ -18,68 +14,22 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Azure Login
-        uses: azure/login@v2
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          node-version: '20'
 
-      - name: Deploy files via Kudu VFS API
+      - name: Install dependencies
+        working-directory: cloudflare-deploy
+        run: npm ci
+
+      - name: Copy frontend files
         run: |
-          # Get publishing credentials
-          CREDS=$(az webapp deployment list-publishing-credentials \
-            --name ${{ env.AZURE_WEBAPP_NAME }} \
-            --resource-group ${{ env.RESOURCE_GROUP }} \
-            --query "[publishingUserName, publishingPassword]" -o tsv)
-          USER=$(echo "$CREDS" | head -1)
-          PASS=$(echo "$CREDS" | tail -1)
-          KUDU_URL="https://${{ env.AZURE_WEBAPP_NAME }}.scm.azurewebsites.net/api/vfs/site/wwwroot"
+          mkdir -p cloudflare-deploy/public
+          cp index.html style.css app.js dashboard.html cloudflare-deploy/public/
 
-          echo "Deploying files to Azure..."
-
-          # Function to upload a file
-          upload_file() {
-            local file=$1
-            local remote_path=$2
-            if [ -f "$file" ]; then
-              ETAG=$(curl -s -I -u "$USER:$PASS" "$KUDU_URL/$remote_path" 2>/dev/null | grep -i "^ETag:" | tr -d '\r' | cut -d' ' -f2)
-              if [ -z "$ETAG" ]; then
-                # File doesn't exist, create it
-                curl -s -X PUT -u "$USER:$PASS" --data-binary "@$file" "$KUDU_URL/$remote_path" -w "$remote_path: %{http_code} (created)\n"
-              else
-                # File exists, update with ETag
-                curl -s -X PUT -u "$USER:$PASS" --data-binary "@$file" -H "If-Match: $ETAG" "$KUDU_URL/$remote_path" -w "$remote_path: %{http_code}\n"
-              fi
-            fi
-          }
-
-          # Upload core Python files
-          upload_file "main.py" "main.py"
-          upload_file "database.py" "database.py"
-          upload_file "ai_service.py" "ai_service.py"
-          upload_file "nutrition_service.py" "nutrition_service.py"
-          upload_file "auth_service.py" "auth_service.py"
-          upload_file "insight_service.py" "insight_service.py"
-          upload_file "requirements.txt" "requirements.txt"
-          upload_file "startup.sh" "startup.sh"
-
-          # Upload frontend files
-          upload_file "index.html" "index.html"
-          upload_file "dashboard.html" "dashboard.html"
-          upload_file "app.js" "app.js"
-          upload_file "style.css" "style.css"
-
-          echo "File deployment complete!"
-
-      - name: Restart the app
-        run: |
-          az webapp restart --name ${{ env.AZURE_WEBAPP_NAME }} --resource-group ${{ env.RESOURCE_GROUP }}
-          echo "App restart initiated, waiting 30 seconds..."
-          sleep 30
-
-      - name: Verify deployment
-        run: |
-          echo "=== Checking dashboard.html for langToggle ==="
-          curl -s "https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net/dashboard.html" | grep -o "langToggle" && echo "✓ Found!" || echo "✗ NOT found"
-          echo ""
-          echo "=== API health ==="
-          curl -s "https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net/api/health"
+      - name: Deploy to Cloudflare Workers
+        working-directory: cloudflare-deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx wrangler deploy
