@@ -1939,10 +1939,13 @@
           id: cryptoRandomId(),  // Each item needs an id for editing
           name: item.name,
           portion_g: item.portion_g,
-          kcal: item.kcal,
-          protein_g: item.protein_g,
-          carbs_g: item.carbs_g,
-          fat_g: item.fat_g,
+          kcal: item.kcal || 0,
+          p: item.protein_g || 0,   // Short field names for sumMealItems
+          c: item.carbs_g || 0,
+          f: item.fat_g || 0,
+          protein_g: item.protein_g || 0,
+          carbs_g: item.carbs_g || 0,
+          fat_g: item.fat_g || 0,
           per100: {
             kcal: item.kcal ? Math.round((item.kcal / (item.portion_g || 100)) * 100) : 100,
             p: item.protein_g ? Math.round((item.protein_g / (item.portion_g || 100)) * 100) : 5,
