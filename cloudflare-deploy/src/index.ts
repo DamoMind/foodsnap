@@ -452,35 +452,62 @@ app.post('/api/analyze', async (c) => {
     const base64Image = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
     const mimeType = imageFile.type || 'image/jpeg';
 
-    // Build the prompt for food recognition
-    const prompt = `你是一个专业的食物营养分析师。请仔细分析这张图片中的食物。
+    // Language-specific instructions
+    const langInstructions: Record<string, string> = {
+      zh: '所有食物名称必须使用中文（简体）。即使包装上是日文或英文，也要翻译成中文。',
+      en: 'All food names MUST be in English. Translate any Japanese or Chinese names.',
+      ja: 'すべての食品名は日本語で記載してください。'
+    };
+    const langHint = langInstructions[lang] || langInstructions.zh;
 
-要求：
-1. 识别图片中所有可见的食物
-2. 估算每种食物的重量（克）
-3. 计算每种食物的营养成分（每100g的热量、蛋白质、碳水、脂肪）
-4. 所有食物名称使用${lang === 'zh' ? '中文' : lang === 'ja' ? '日语' : '英语'}
+    // Build the prompt for food recognition - enhanced version
+    const prompt = `你是一个专业的食物识别和营养分析助手，拥有丰富的中餐、日料、西餐营养知识。
 
-请以JSON格式返回，格式如下：
+**语言要求**: ${langHint}
+
+**识别要求**:
+1. 仔细识别图片中**所有可见的食物**，包括配菜、酱料、饮料
+2. 如果是套餐/便当，分别识别每个组成部分
+3. 估算每种食物的重量（参考常见份量：一碗米饭约150-200g，一份肉约100-150g）
+4. 提供每100g的营养数据
+
+**营养参考数据**:
+- 米饭(熟) 100g: 116kcal, 2.6g蛋白质, 25.9g碳水, 0.3g脂肪
+- 鸡胸肉 100g: 165kcal, 31g蛋白质, 0g碳水, 3.6g脂肪
+- 红烧肉 100g: 500kcal, 15g蛋白质, 5g碳水, 45g脂肪
+- 清蒸鱼 100g: 110kcal, 20g蛋白质, 0g碳水, 3g脂肪
+- 炒青菜 100g: 50kcal, 2g蛋白质, 5g碳水, 3g脂肪
+- 拉面(带汤) 100g: 89kcal, 5g蛋白质, 13g碳水, 2g脂肪
+- 寿司(握寿司) 100g: 150kcal, 6g蛋白质, 22g碳水, 4g脂肪
+- 生鱼片 100g: 127kcal, 26g蛋白质, 0g碳水, 2g脂肪
+- 天妇罗 100g: 200kcal, 5g蛋白质, 20g碳水, 11g脂肪
+- 饺子 100g: 220kcal, 8g蛋白质, 25g碳水, 10g脂肪
+- 面包 100g: 265kcal, 9g蛋白质, 49g碳水, 3g脂肪
+- 牛排 100g: 271kcal, 26g蛋白质, 0g碳水, 18g脂肪
+- 沙拉(无酱) 100g: 20kcal, 1g蛋白质, 4g碳水, 0.2g脂肪
+
+返回严格JSON格式:
 {
   "foods": [
     {
       "name": "食物名称",
-      "weight_g": 估算重量,
+      "weight_g": 估算重量(数字),
       "confidence": 置信度0-1,
+      "cooking_method": "烹饪方式(如:清蒸/红烧/油炸/生食)",
       "nutrition_per_100g": {
         "kcal": 热量,
-        "protein_g": 蛋白质克,
-        "carbs_g": 碳水克,
-        "fat_g": 脂肪克
+        "protein_g": 蛋白质,
+        "carbs_g": 碳水,
+        "fat_g": 脂肪
       }
     }
   ],
   "meal_type": "breakfast/lunch/dinner/snack",
-  "overall_confidence": 整体置信度0-1
+  "overall_confidence": 整体置信度0-1,
+  "notes": "可选的备注，如：图片模糊/部分遮挡等"
 }
 
-只返回JSON，不要其他文字。`;
+只返回JSON，不要markdown代码块或其他文字。`;
 
     // Call edge-ai-gateway
     const headers: Record<string, string> = {
