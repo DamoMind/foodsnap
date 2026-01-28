@@ -1790,11 +1790,16 @@
             name: item.name,
             portion_g: item.portion_g || item.portion?.estimated || 100,
             kcal: item.kcal || 0,
-            protein_g: item.protein_g || 0,
-            carbs_g: item.carbs_g || 0,
-            fat_g: item.fat_g || 0
+            protein_g: item.protein_g || item.p || 0,
+            carbs_g: item.carbs_g || item.c || 0,
+            fat_g: item.fat_g || item.f || 0
           })),
-          totals: meal.summary || sumMealItems(meal.items)
+          totals: {
+            kcal: (meal.summary?.kcal || 0),
+            protein_g: (meal.summary?.p || meal.summary?.protein_g || 0),
+            carbs_g: (meal.summary?.c || meal.summary?.carbs_g || 0),
+            fat_g: (meal.summary?.f || meal.summary?.fat_g || 0)
+          }
         })
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
