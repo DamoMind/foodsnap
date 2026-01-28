@@ -8,7 +8,7 @@ ENVIRONMENT = "production"
 [[d1_databases]]
 binding = "DB"
 database_name = "foodsnap-db"
-database_id = "placeholder-will-be-replaced"
+database_id = "db018196-c719-47a6-9ddf-c0bec7d8626f"
 
 # Static assets (frontend)
 [site]
@@ -18,3 +18,8 @@ bucket = "./public"
 # [[r2_buckets]]
 # binding = "IMAGES"
 # bucket_name = "foodsnap-images"
+
+# Custom domain
+[[routes]]
+pattern = "foodsnap.duku.app/*"
+zone_name = "duku.app"

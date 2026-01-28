@@ -38,3 +38,4 @@ deploy.zip
 
 # Logs
 *.log
+cloudflare-deploy/node_modules/

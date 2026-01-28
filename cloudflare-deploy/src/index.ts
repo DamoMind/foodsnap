@@ -10,9 +10,8 @@ import { serveStatic } from 'hono/cloudflare-workers';
 // Types
 interface Env {
   DB: D1Database;
-  AZURE_OPENAI_ENDPOINT?: string;
-  AZURE_OPENAI_API_KEY?: string;
-  AZURE_OPENAI_DEPLOYMENT?: string;
+  AI_GATEWAY_URL?: string;
+  AI_GATEWAY_KEY?: string;
 }
 
 interface UserGoal {
@@ -434,40 +433,144 @@ app.get('/api/recommendations', async (c) => {
   });
 });
 
-// AI Analyze endpoint (requires Azure OpenAI config)
+// AI Analyze endpoint - uses edge-ai-gateway
 app.post('/api/analyze', async (c) => {
-  const { AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY, AZURE_OPENAI_DEPLOYMENT } = c.env;
+  const AI_GATEWAY_URL = c.env.AI_GATEWAY_URL || 'https://edge-ai-gateway.duizhan.app';
+  const AI_GATEWAY_KEY = c.env.AI_GATEWAY_KEY;
 
-  if (!AZURE_OPENAI_ENDPOINT || !AZURE_OPENAI_API_KEY || !AZURE_OPENAI_DEPLOYMENT) {
-    return c.json({
-      error: 'AI service not configured',
-      message: '请配置 Azure OpenAI 环境变量'
-    }, 500);
-  }
+  try {
+    const formData = await c.req.formData();
+    const imageFile = formData.get('image') as File | null;
+    const lang = (formData.get('lang') as string) || 'zh';
 
-  // For MVP, return mock data
-  // In production, integrate with Azure OpenAI GPT-4V
-  return c.json({
-    ai: {
-      foods: [
-        { name: '米饭', weight_g: 200, confidence: 0.95 },
-        { name: '红烧肉', weight_g: 150, confidence: 0.88 }
-      ],
-      scene: 'lunch'
-    },
-    meal_preview: {
-      items: [
-        { name: '米饭', weight_g: 200, kcal: 232, protein_g: 5.2, carbs_g: 51.8, fat_g: 0.6 },
-        { name: '红烧肉', weight_g: 150, kcal: 450, protein_g: 25, carbs_g: 10, fat_g: 35 }
-      ],
-      totals: {
-        kcal: 682,
-        protein_g: 30.2,
-        carbs_g: 61.8,
-        fat_g: 35.6
+    if (!imageFile) {
+      return c.json({ error: 'No image provided' }, 400);
+    }
+
+    // Convert image to base64
+    const arrayBuffer = await imageFile.arrayBuffer();
+    const base64Image = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+    const mimeType = imageFile.type || 'image/jpeg';
+
+    // Build the prompt for food recognition
+    const prompt = `你是一个专业的食物营养分析师。请仔细分析这张图片中的食物。
+
+要求：
+1. 识别图片中所有可见的食物
+2. 估算每种食物的重量（克）
+3. 计算每种食物的营养成分（每100g的热量、蛋白质、碳水、脂肪）
+4. 所有食物名称使用${lang === 'zh' ? '中文' : lang === 'ja' ? '日语' : '英语'}
+
+请以JSON格式返回，格式如下：
+{
+  "foods": [
+    {
+      "name": "食物名称",
+      "weight_g": 估算重量,
+      "confidence": 置信度0-1,
+      "nutrition_per_100g": {
+        "kcal": 热量,
+        "protein_g": 蛋白质克,
+        "carbs_g": 碳水克,
+        "fat_g": 脂肪克
       }
     }
-  });
+  ],
+  "meal_type": "breakfast/lunch/dinner/snack",
+  "overall_confidence": 整体置信度0-1
+}
+
+只返回JSON，不要其他文字。`;
+
+    // Call edge-ai-gateway
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (AI_GATEWAY_KEY) {
+      headers['Authorization'] = `Bearer ${AI_GATEWAY_KEY}`;
+    }
+
+    const response = await fetch(`${AI_GATEWAY_URL}/v1/chat/completions`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: prompt },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: `data:${mimeType};base64,${base64Image}`
+                }
+              }
+            ]
+          }
+        ],
+        max_tokens: 2000
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('AI Gateway error:', errorText);
+      return c.json({ error: 'AI service error', details: errorText }, 500);
+    }
+
+    const aiResult = await response.json() as any;
+    const content = aiResult.choices?.[0]?.message?.content || '';
+
+    // Parse JSON from response
+    let parsed;
+    try {
+      // Try to extract JSON from markdown code block if present
+      const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, content];
+      parsed = JSON.parse(jsonMatch[1].trim());
+    } catch (e) {
+      console.error('Failed to parse AI response:', content);
+      return c.json({ error: 'Failed to parse AI response', raw: content }, 500);
+    }
+
+    // Calculate totals and build meal preview
+    const items = (parsed.foods || []).map((food: any) => {
+      const weight = food.weight_g || 100;
+      const n = food.nutrition_per_100g || {};
+      return {
+        name: food.name,
+        weight_g: weight,
+        confidence: food.confidence || 0.8,
+        kcal: Math.round((n.kcal || 0) * weight / 100),
+        protein_g: Math.round((n.protein_g || 0) * weight / 100 * 10) / 10,
+        carbs_g: Math.round((n.carbs_g || 0) * weight / 100 * 10) / 10,
+        fat_g: Math.round((n.fat_g || 0) * weight / 100 * 10) / 10,
+      };
+    });
+
+    const totals = items.reduce((acc: any, item: any) => ({
+      kcal: acc.kcal + item.kcal,
+      protein_g: Math.round((acc.protein_g + item.protein_g) * 10) / 10,
+      carbs_g: Math.round((acc.carbs_g + item.carbs_g) * 10) / 10,
+      fat_g: Math.round((acc.fat_g + item.fat_g) * 10) / 10,
+    }), { kcal: 0, protein_g: 0, carbs_g: 0, fat_g: 0 });
+
+    return c.json({
+      ai: {
+        foods: parsed.foods,
+        meal_type: parsed.meal_type || 'unknown',
+        overall_confidence: parsed.overall_confidence || 0.8
+      },
+      meal_preview: {
+        items,
+        totals
+      }
+    });
+
+  } catch (error: any) {
+    console.error('Analyze error:', error);
+    return c.json({ error: 'Analysis failed', message: error.message }, 500);
+  }
 });
 
 // Serve static files (frontend)
