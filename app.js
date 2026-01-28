@@ -1640,38 +1640,40 @@
       wrap.appendChild(el);
     });
 
-    // bind range slider (oninput for real-time feedback)
+    // bind range + number input + delete (event delegation)
     wrap.oninput = (e) => {
+      // Handle range slider
       const r = e.target.closest('input[type="range"][data-id]');
-      if (!r) return;
-      const id = r.dataset.id;
-      const it = meal.items.find(x => x.id === id);
-      if (!it) return;
-      it.weight_g = Number(r.value);
-      it.manual = true;
-      recalcItem(it);
-      // Sync number input
-      const numInput = wrap.querySelector(`input[data-weight-id="${CSS.escape(id)}"]`);
-      if (numInput) numInput.value = round0(it.weight_g);
-      renderResultSheet(meal);
-    };
+      if (r) {
+        const id = r.dataset.id;
+        const it = meal.items.find(x => x.id === id);
+        if (!it) return;
+        it.weight_g = Number(r.value);
+        it.manual = true;
+        recalcItem(it);
+        // Sync number input
+        const numInput = wrap.querySelector(`input[data-weight-id="${CSS.escape(id)}"]`);
+        if (numInput) numInput.value = round0(it.weight_g);
+        renderResultSheet(meal);
+        return;
+      }
 
-    // bind number input (onchange for better UX - only update when done typing)
-    wrap.onchange = (e) => {
+      // Handle number input
       const numInput = e.target.closest('input[data-weight-id]');
-      if (!numInput) return;
-      const id = numInput.dataset.weightId;
-      const it = meal.items.find(x => x.id === id);
-      if (!it) return;
-      const newVal = clamp(Number(numInput.value) || 10, 10, 2000);
-      it.weight_g = newVal;
-      numInput.value = round0(newVal); // normalize display
-      it.manual = true;
-      recalcItem(it);
-      // Sync range slider
-      const rangeInput = wrap.querySelector(`input[type="range"][data-id="${CSS.escape(id)}"]`);
-      if (rangeInput) rangeInput.value = Math.min(newVal, 800);
-      renderResultSheet(meal);
+      if (numInput) {
+        const id = numInput.dataset.weightId;
+        const it = meal.items.find(x => x.id === id);
+        if (!it) return;
+        const newVal = clamp(Number(numInput.value) || 10, 10, 2000);
+        it.weight_g = newVal;
+        it.manual = true;
+        recalcItem(it);
+        // Sync range slider
+        const rangeInput = wrap.querySelector(`input[type="range"][data-id="${CSS.escape(id)}"]`);
+        if (rangeInput) rangeInput.value = Math.min(newVal, 800);
+        renderResultSheet(meal);
+        return;
+      }
     };
 
     wrap.onclick = (e) => {
