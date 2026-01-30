@@ -86,6 +86,25 @@
           <button class="text-btn" id="addExerciseBtn" data-i18n="addExercise">添加运动</button>
         </div>
 
+        <!-- Health Tracking Quick Actions -->
+        <div class="health-actions">
+          <button class="health-btn" id="openWeightBtn">
+            <span class="health-btn__icon">⚖️</span>
+            <span class="health-btn__label" data-i18n="weight">体重</span>
+            <span class="health-btn__value" id="latestWeight">--</span>
+          </button>
+          <button class="health-btn" id="openSupplementsBtn">
+            <span class="health-btn__icon">💊</span>
+            <span class="health-btn__label" data-i18n="supplements">补剂</span>
+            <span class="health-btn__value" id="supplementsTaken">0/<span id="supplementsTotal">0</span></span>
+          </button>
+          <button class="health-btn" id="openInsightsBtn">
+            <span class="health-btn__icon">🧠</span>
+            <span class="health-btn__label" data-i18n="aiInsights">AI洞察</span>
+            <span class="health-btn__value" id="insightsScore">--</span>
+          </button>
+        </div>
+
         <div class="advice" id="adviceCard">
           <div class="advice__title" data-i18n="advice">建议</div>
           <div class="advice__text" id="adviceText" data-i18n="setGoalHint">设置目标后，将给出可执行建议。</div>
@@ -256,6 +275,182 @@
       <div class="sheet__footer">
         <button class="btn btn--ghost" data-close="1" data-i18n="cancel">取消</button>
         <button class="btn btn--primary" id="saveExerciseBtn" data-i18n="save">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI健康洞察弹层 -->
+  <div class="sheet" id="insightsSheet" aria-hidden="true">
+    <div class="sheet__mask" data-close="1"></div>
+    <div class="sheet__panel sheet__panel--large">
+      <div class="sheet__title">🧠 <span data-i18n="aiHealthInsights">AI 健康洞察</span></div>
+      <div class="sheet__body">
+        <div id="insightsLoading" class="insights-loading">
+          <div class="spinner"></div>
+          <p data-i18n="analyzingHealth">正在分析您的健康数据...</p>
+        </div>
+        <div id="insightsContent" class="insights-content" hidden>
+          <!-- Score Circle -->
+          <div class="insights-score-section">
+            <div class="score-circle" id="scoreCircle">
+              <span class="score-number" id="overallScore">--</span>
+              <span class="score-label" data-i18n="healthScore">健康分</span>
+            </div>
+            <div class="score-focus" id="focusThisWeek"></div>
+          </div>
+
+          <!-- Analysis Cards -->
+          <div class="insights-grid">
+            <div class="insight-card" id="dietCard">
+              <div class="insight-card__header">
+                <span class="insight-card__icon">🍽️</span>
+                <span class="insight-card__title" data-i18n="dietAnalysis">饮食分析</span>
+                <span class="insight-card__score" id="dietScore">--</span>
+              </div>
+              <div class="insight-card__body" id="dietBody"></div>
+            </div>
+
+            <div class="insight-card" id="exerciseCard">
+              <div class="insight-card__header">
+                <span class="insight-card__icon">🏃</span>
+                <span class="insight-card__title" data-i18n="exerciseAnalysis">运动分析</span>
+                <span class="insight-card__score" id="exerciseScore">--</span>
+              </div>
+              <div class="insight-card__body" id="exerciseBody"></div>
+            </div>
+
+            <div class="insight-card" id="weightCard">
+              <div class="insight-card__header">
+                <span class="insight-card__icon">⚖️</span>
+                <span class="insight-card__title" data-i18n="weightTrend">体重趋势</span>
+              </div>
+              <div class="insight-card__body" id="weightBody"></div>
+            </div>
+
+            <div class="insight-card" id="supplementCard">
+              <div class="insight-card__header">
+                <span class="insight-card__icon">💊</span>
+                <span class="insight-card__title" data-i18n="supplementCompliance">补剂依从性</span>
+                <span class="insight-card__score" id="supplementPct">--%</span>
+              </div>
+              <div class="insight-card__body" id="supplementBody"></div>
+            </div>
+          </div>
+
+          <!-- Recommendations -->
+          <div class="insights-recommendations">
+            <h3 data-i18n="recommendations">建议</h3>
+            <ul id="recommendationsList"></ul>
+          </div>
+
+          <!-- Correlations -->
+          <div class="insights-correlations" id="correlationsSection" hidden>
+            <h3 data-i18n="discoveredPatterns">发现的关联</h3>
+            <ul id="correlationsList"></ul>
+          </div>
+        </div>
+
+        <div id="insightsError" class="insights-error" hidden>
+          <p data-i18n="insightsError">分析失败，请稍后重试</p>
+          <button class="btn btn--primary" id="retryInsightsBtn" data-i18n="retry">重试</button>
+        </div>
+      </div>
+      <div class="sheet__footer">
+        <button class="btn btn--primary" data-close="1" data-i18n="close">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 体重记录弹层 -->
+  <div class="sheet" id="weightSheet" aria-hidden="true">
+    <div class="sheet__mask" data-close="1"></div>
+    <div class="sheet__panel">
+      <div class="sheet__title" data-i18n="weightTracking">体重记录</div>
+      <div class="sheet__body">
+        <div class="form">
+          <label class="field">
+            <span class="field__label" data-i18n="currentWeight">当前体重</span>
+            <div class="input-group">
+              <input id="weightKgInput" class="input" type="number" inputmode="decimal" min="30" max="300" step="0.1" placeholder="70.0" />
+              <span class="input-suffix">kg</span>
+            </div>
+          </label>
+
+          <label class="field">
+            <span class="field__label" data-i18n="bodyFat">体脂率 (可选)</span>
+            <div class="input-group">
+              <input id="bodyFatInput" class="input" type="number" inputmode="decimal" min="3" max="60" step="0.1" placeholder="20.0" />
+              <span class="input-suffix">%</span>
+            </div>
+          </label>
+
+          <label class="field">
+            <span class="field__label" data-i18n="notes">备注 (可选)</span>
+            <input id="weightNotesInput" class="input" type="text" placeholder="" />
+          </label>
+
+          <!-- Weight History -->
+          <div class="weight-history" id="weightHistory">
+            <div class="section-title" data-i18n="recentRecords">最近记录</div>
+            <div id="weightHistoryList" class="history-list"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sheet__footer">
+        <button class="btn btn--ghost" data-close="1" data-i18n="cancel">取消</button>
+        <button class="btn btn--primary" id="saveWeightBtn" data-i18n="save">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 补剂管理弹层 -->
+  <div class="sheet" id="supplementsSheet" aria-hidden="true">
+    <div class="sheet__mask" data-close="1"></div>
+    <div class="sheet__panel">
+      <div class="sheet__title" data-i18n="supplementsManage">补剂/用药</div>
+      <div class="sheet__body">
+        <div class="form">
+          <!-- Today's supplements checklist -->
+          <div class="supplements-today" id="supplementsToday">
+            <div class="section-title" data-i18n="todaySupplements">今日服用</div>
+            <div id="supplementsChecklist" class="supplements-checklist"></div>
+            <div id="noSupplements" class="empty-hint" data-i18n="noSupplementsYet">还没有添加补剂，点击下方添加</div>
+          </div>
+
+          <div class="divider-text"><span data-i18n="manageSupplements">管理补剂</span></div>
+
+          <!-- Add new supplement -->
+          <div class="add-supplement-form">
+            <label class="field">
+              <span class="field__label" data-i18n="supplementName">名称</span>
+              <input id="supplementNameInput" class="input" type="text" placeholder="维生素D / 鱼油 / 肌酸..." />
+            </label>
+            <div class="grid2">
+              <label class="field">
+                <span class="field__label" data-i18n="dosage">剂量</span>
+                <input id="supplementDosageInput" class="input" type="text" placeholder="1000IU / 2粒" />
+              </label>
+              <label class="field">
+                <span class="field__label" data-i18n="frequency">频率</span>
+                <select id="supplementFrequencySelect" class="select">
+                  <option value="daily">每天</option>
+                  <option value="twice_daily">每天两次</option>
+                  <option value="weekly">每周</option>
+                  <option value="as_needed">按需</option>
+                </select>
+              </label>
+            </div>
+            <button class="btn btn--outline btn--block" id="addSupplementBtn">
+              <span>+</span> <span data-i18n="addSupplement">添加补剂</span>
+            </button>
+          </div>
+
+          <!-- Existing supplements list -->
+          <div id="supplementsList" class="supplements-list"></div>
+        </div>
+      </div>
+      <div class="sheet__footer">
+        <button class="btn btn--primary" data-close="1" data-i18n="done">完成</button>
       </div>
     </div>
   </div>

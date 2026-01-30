@@ -125,6 +125,46 @@
       recognizing: '识别中...',
       exerciseRecognized: '识别成功',
       exerciseRecognizeFailed: '识别失败，请手动输入',
+      // Body metrics
+      weight: '体重',
+      weightTracking: '体重记录',
+      currentWeight: '当前体重',
+      bodyFat: '体脂率',
+      recentRecords: '最近记录',
+      noWeightRecords: '还没有体重记录',
+      weightSaved: '体重已保存',
+      // Supplements
+      supplements: '补剂',
+      supplementsManage: '补剂/用药',
+      todaySupplements: '今日服用',
+      noSupplementsYet: '还没有添加补剂',
+      manageSupplements: '管理补剂',
+      supplementName: '名称',
+      dosage: '剂量',
+      frequency: '频率',
+      addSupplement: '添加补剂',
+      supplementAdded: '补剂已添加',
+      supplementTaken: '已服用',
+      done: '完成',
+      // AI Insights
+      aiInsights: 'AI洞察',
+      aiHealthInsights: 'AI 健康洞察',
+      analyzingHealth: '正在分析您的健康数据...',
+      healthScore: '健康分',
+      dietAnalysis: '饮食分析',
+      exerciseAnalysis: '运动分析',
+      weightTrend: '体重趋势',
+      supplementCompliance: '补剂依从性',
+      recommendations: '建议',
+      discoveredPatterns: '发现的关联',
+      insightsError: '分析失败，请稍后重试',
+      retry: '重试',
+      close: '关闭',
+      avgDailyKcal: '日均热量',
+      proteinStatus: '蛋白质',
+      avgDailySteps: '日均步数',
+      totalActiveMin: '总活动时间',
+      noDataYet: '暂无数据',
       login: '登录',
       logout: '退出登录',
       loginBenefit: '登录后，您的数据将安全保存在云端，可在多设备间同步。',
@@ -250,6 +290,46 @@
       recognizing: 'Recognizing...',
       exerciseRecognized: 'Recognized',
       exerciseRecognizeFailed: 'Recognition failed, please enter manually',
+      // Body metrics
+      weight: 'Weight',
+      weightTracking: 'Weight Tracking',
+      currentWeight: 'Current Weight',
+      bodyFat: 'Body Fat',
+      recentRecords: 'Recent Records',
+      noWeightRecords: 'No weight records yet',
+      weightSaved: 'Weight saved',
+      // Supplements
+      supplements: 'Supplements',
+      supplementsManage: 'Supplements & Meds',
+      todaySupplements: 'Today\'s Intake',
+      noSupplementsYet: 'No supplements added yet',
+      manageSupplements: 'Manage Supplements',
+      supplementName: 'Name',
+      dosage: 'Dosage',
+      frequency: 'Frequency',
+      addSupplement: 'Add Supplement',
+      supplementAdded: 'Supplement added',
+      supplementTaken: 'Taken',
+      done: 'Done',
+      // AI Insights
+      aiInsights: 'AI Insights',
+      aiHealthInsights: 'AI Health Insights',
+      analyzingHealth: 'Analyzing your health data...',
+      healthScore: 'Health Score',
+      dietAnalysis: 'Diet Analysis',
+      exerciseAnalysis: 'Exercise Analysis',
+      weightTrend: 'Weight Trend',
+      supplementCompliance: 'Supplement Compliance',
+      recommendations: 'Recommendations',
+      discoveredPatterns: 'Discovered Patterns',
+      insightsError: 'Analysis failed, please try again',
+      retry: 'Retry',
+      close: 'Close',
+      avgDailyKcal: 'Avg Daily Calories',
+      proteinStatus: 'Protein',
+      avgDailySteps: 'Avg Daily Steps',
+      totalActiveMin: 'Total Active Minutes',
+      noDataYet: 'No data yet',
       login: 'Login',
       logout: 'Log Out',
       loginBenefit: 'Login to sync your data across devices and keep it safe in the cloud.',
@@ -1639,9 +1719,375 @@
       }
     });
 
+    // ============== Weight Tracking ==============
+    $('#openWeightBtn')?.addEventListener('click', async () => {
+      setSheetOpen($('#weightSheet'), true);
+      await loadWeightHistory();
+    });
+
+    $('#saveWeightBtn')?.addEventListener('click', async () => {
+      const weightKg = parseFloat($('#weightKgInput').value);
+      const bodyFatPct = parseFloat($('#bodyFatInput').value) || null;
+      const notes = $('#weightNotesInput').value || null;
+
+      if (!weightKg || weightKg < 30 || weightKg > 300) {
+        showToast(currentLang === 'zh' ? '请输入有效体重' : 'Please enter valid weight');
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/body-metrics', {
+          method: 'POST',
+          headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ weight_kg: weightKg, body_fat_pct: bodyFatPct, notes })
+        });
+
+        if (!response.ok) throw new Error('Save failed');
+
+        showToast(t('weightSaved'));
+        $('#weightKgInput').value = '';
+        $('#bodyFatInput').value = '';
+        $('#weightNotesInput').value = '';
+        await loadWeightHistory();
+        updateLatestWeight();
+        gtmEvent('save_weight', { weight: weightKg });
+      } catch (err) {
+        console.error('Save weight error:', err);
+        showToast(currentLang === 'zh' ? '保存失败' : 'Save failed');
+      }
+    });
+
+    async function loadWeightHistory() {
+      const list = $('#weightHistoryList');
+      if (!list) return;
+
+      try {
+        const response = await fetch('/api/body-metrics?limit=10', {
+          headers: getAuthHeaders()
+        });
+        if (!response.ok) throw new Error('Load failed');
+
+        const { metrics } = await response.json();
+        
+        if (!metrics || metrics.length === 0) {
+          list.innerHTML = `<div class="empty-hint">${t('noWeightRecords')}</div>`;
+          return;
+        }
+
+        let prevWeight = null;
+        list.innerHTML = metrics.map((m, i) => {
+          const change = prevWeight ? (m.weight_kg - prevWeight).toFixed(1) : null;
+          const changeClass = change ? (parseFloat(change) > 0 ? 'up' : 'down') : '';
+          const changeText = change ? `${parseFloat(change) > 0 ? '+' : ''}${change} kg` : '';
+          prevWeight = m.weight_kg;
+          
+          const date = new Date(m.measured_at).toLocaleDateString(currentLang === 'zh' ? 'zh-CN' : 'en-US', { month: 'short', day: 'numeric' });
+          
+          return `
+            <div class="history-item">
+              <div class="history-item__main">
+                <span class="history-item__weight">${m.weight_kg} kg</span>
+                ${m.body_fat_pct ? `<span style="color:var(--text-muted);font-size:0.85em">${m.body_fat_pct}%</span>` : ''}
+                ${changeText ? `<span class="history-item__change ${changeClass}">${changeText}</span>` : ''}
+              </div>
+              <span class="history-item__date">${date}</span>
+            </div>
+          `;
+        }).join('');
+      } catch (err) {
+        console.error('Load weight history error:', err);
+        list.innerHTML = `<div class="empty-hint">${t('noWeightRecords')}</div>`;
+      }
+    }
+
+    async function updateLatestWeight() {
+      try {
+        const response = await fetch('/api/body-metrics/latest', { headers: getAuthHeaders() });
+        if (!response.ok) return;
+        const { metric } = await response.json();
+        if (metric && metric.weight_kg) {
+          $('#latestWeight').textContent = `${metric.weight_kg} kg`;
+        }
+      } catch {}
+    }
+
+    // ============== Supplements ==============
+    $('#openSupplementsBtn')?.addEventListener('click', async () => {
+      setSheetOpen($('#supplementsSheet'), true);
+      await loadSupplements();
+      await loadTodaySupplementLogs();
+    });
+
+    $('#addSupplementBtn')?.addEventListener('click', async () => {
+      const name = $('#supplementNameInput').value.trim();
+      const dosage = $('#supplementDosageInput').value.trim() || null;
+      const frequency = $('#supplementFrequencySelect').value;
+
+      if (!name) {
+        showToast(currentLang === 'zh' ? '请输入补剂名称' : 'Please enter supplement name');
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/supplements', {
+          method: 'POST',
+          headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, dosage, frequency })
+        });
+
+        if (!response.ok) throw new Error('Add failed');
+
+        showToast(t('supplementAdded'));
+        $('#supplementNameInput').value = '';
+        $('#supplementDosageInput').value = '';
+        await loadSupplements();
+        await loadTodaySupplementLogs();
+        gtmEvent('add_supplement', { name });
+      } catch (err) {
+        console.error('Add supplement error:', err);
+        showToast(currentLang === 'zh' ? '添加失败' : 'Add failed');
+      }
+    });
+
+    async function loadSupplements() {
+      const list = $('#supplementsList');
+      const checklist = $('#supplementsChecklist');
+      const noSupplements = $('#noSupplements');
+      if (!list) return;
+
+      try {
+        const response = await fetch('/api/supplements', { headers: getAuthHeaders() });
+        if (!response.ok) throw new Error('Load failed');
+
+        const { supplements } = await response.json();
+        
+        if (!supplements || supplements.length === 0) {
+          list.innerHTML = '';
+          checklist.innerHTML = '';
+          noSupplements.hidden = false;
+          $('#supplementsTotal').textContent = '0';
+          return;
+        }
+
+        noSupplements.hidden = true;
+        $('#supplementsTotal').textContent = supplements.length;
+
+        // Update checklist (for today's tracking)
+        window._supplements = supplements; // Store for later use
+        
+        // Render supplements list
+        list.innerHTML = supplements.map(s => `
+          <div class="supplement-item" data-id="${s.id}">
+            <div class="supplement-item__info">
+              <div class="supplement-item__name">${escapeHtml(s.name)}</div>
+              <div class="supplement-item__detail">${s.dosage || ''} · ${s.frequency || ''}</div>
+            </div>
+            <div class="supplement-item__actions">
+              <button class="supplement-item__btn delete" data-delete="${s.id}">🗑️</button>
+            </div>
+          </div>
+        `).join('');
+
+        // Bind delete events
+        list.querySelectorAll('[data-delete]').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            const id = btn.dataset.delete;
+            if (!confirm(currentLang === 'zh' ? '确定删除？' : 'Delete this supplement?')) return;
+            
+            try {
+              await fetch(`/api/supplements/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
+              await loadSupplements();
+              await loadTodaySupplementLogs();
+            } catch (err) {
+              console.error('Delete supplement error:', err);
+            }
+          });
+        });
+      } catch (err) {
+        console.error('Load supplements error:', err);
+      }
+    }
+
+    async function loadTodaySupplementLogs() {
+      const checklist = $('#supplementsChecklist');
+      if (!checklist || !window._supplements) return;
+
+      try {
+        const response = await fetch(`/api/supplement-logs?day=${todayKey()}`, { headers: getAuthHeaders() });
+        if (!response.ok) throw new Error('Load failed');
+
+        const { logs } = await response.json();
+        const takenIds = new Set(logs.map(l => l.supplement_id));
+
+        // Render checklist
+        checklist.innerHTML = window._supplements.map(s => {
+          const taken = takenIds.has(s.id);
+          return `
+            <div class="supplement-check ${taken ? 'taken' : ''}" data-supplement-id="${s.id}">
+              <div class="supplement-check__checkbox">${taken ? '✓' : ''}</div>
+              <div class="supplement-check__info">
+                <div class="supplement-check__name">${escapeHtml(s.name)}</div>
+                <div class="supplement-check__dosage">${s.dosage || ''}</div>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        // Update taken count
+        $('#supplementsTaken').textContent = takenIds.size;
+
+        // Bind click to toggle
+        checklist.querySelectorAll('.supplement-check').forEach(el => {
+          el.addEventListener('click', async () => {
+            const id = el.dataset.supplementId;
+            if (el.classList.contains('taken')) return; // Already taken today
+            
+            try {
+              await fetch(`/api/supplements/${id}/log`, {
+                method: 'POST',
+                headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+              });
+              
+              el.classList.add('taken');
+              el.querySelector('.supplement-check__checkbox').textContent = '✓';
+              const takenEl = $('#supplementsTaken');
+              takenEl.textContent = parseInt(takenEl.textContent) + 1;
+              
+              showToast(t('supplementTaken'));
+              gtmEvent('supplement_taken', { supplement_id: id });
+            } catch (err) {
+              console.error('Log supplement error:', err);
+            }
+          });
+        });
+      } catch (err) {
+        console.error('Load supplement logs error:', err);
+      }
+    }
+
+    // ============== AI Health Insights ==============
+    $('#openInsightsBtn')?.addEventListener('click', () => {
+      setSheetOpen($('#insightsSheet'), true);
+      loadHealthInsights();
+    });
+
+    $('#retryInsightsBtn')?.addEventListener('click', () => {
+      loadHealthInsights();
+    });
+
+    async function loadHealthInsights() {
+      const loading = $('#insightsLoading');
+      const content = $('#insightsContent');
+      const error = $('#insightsError');
+
+      loading.hidden = false;
+      content.hidden = true;
+      error.hidden = true;
+
+      try {
+        const response = await fetch(`/api/insights/health?lang=${currentLang}`, {
+          headers: getAuthHeaders()
+        });
+
+        if (!response.ok) throw new Error('Load failed');
+
+        const data = await response.json();
+        
+        if (!data.success || !data.insights) {
+          throw new Error(data.error || 'No insights');
+        }
+
+        const insights = data.insights;
+
+        // Update score
+        $('#overallScore').textContent = insights.overall_score || '--';
+        $('#focusThisWeek').textContent = insights.focus_this_week || '';
+        $('#insightsScore').textContent = insights.overall_score || '--';
+
+        // Update score circle color based on score
+        const score = insights.overall_score || 0;
+        const scoreCircle = $('#scoreCircle');
+        if (score >= 80) {
+          scoreCircle.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+        } else if (score >= 60) {
+          scoreCircle.style.background = 'linear-gradient(135deg, #0ea5e9, #0284c7)';
+        } else if (score >= 40) {
+          scoreCircle.style.background = 'linear-gradient(135deg, #f59e0b, #d97706)';
+        } else {
+          scoreCircle.style.background = 'linear-gradient(135deg, #ef4444, #dc2626)';
+        }
+
+        // Diet analysis
+        const diet = insights.diet_analysis || {};
+        $('#dietScore').textContent = diet.score || '--';
+        $('#dietBody').innerHTML = `
+          <div class="stat"><span class="stat-label">${t('avgDailyKcal')}</span><span class="stat-value">${diet.avg_daily_kcal || '--'} kcal</span></div>
+          <div class="stat"><span class="stat-label">${t('proteinStatus')}</span><span class="stat-value">${diet.protein_adequacy || '--'}</span></div>
+          ${diet.issues?.length ? `<div style="margin-top:8px;color:var(--warning)">${diet.issues.join(', ')}</div>` : ''}
+        `;
+
+        // Exercise analysis
+        const exercise = insights.exercise_analysis || {};
+        $('#exerciseScore').textContent = exercise.score || '--';
+        $('#exerciseBody').innerHTML = `
+          <div class="stat"><span class="stat-label">${t('avgDailySteps')}</span><span class="stat-value">${exercise.avg_daily_steps || '--'}</span></div>
+          <div class="stat"><span class="stat-label">${t('totalActiveMin')}</span><span class="stat-value">${exercise.total_active_minutes || '--'} min</span></div>
+          ${exercise.assessment ? `<div style="margin-top:8px">${exercise.assessment}</div>` : ''}
+        `;
+
+        // Weight analysis
+        const weight = insights.weight_analysis || {};
+        const trendIcon = weight.trend === '上升' || weight.trend === 'up' ? '📈' : 
+                         weight.trend === '下降' || weight.trend === 'down' ? '📉' : 
+                         weight.trend === '稳定' || weight.trend === 'stable' ? '➡️' : '❓';
+        $('#weightBody').innerHTML = `
+          <div class="stat"><span class="stat-label">趋势</span><span class="stat-value">${trendIcon} ${weight.trend || t('noDataYet')}</span></div>
+          ${weight.change_kg !== null && weight.change_kg !== undefined ? `<div class="stat"><span class="stat-label">变化</span><span class="stat-value">${weight.change_kg > 0 ? '+' : ''}${weight.change_kg} kg</span></div>` : ''}
+          ${weight.assessment ? `<div style="margin-top:8px">${weight.assessment}</div>` : ''}
+        `;
+
+        // Supplement compliance
+        const supp = insights.supplement_compliance || {};
+        $('#supplementPct').textContent = `${supp.overall_pct || 0}%`;
+        $('#supplementBody').innerHTML = supp.missed_supplements?.length 
+          ? `<div>未服用: ${supp.missed_supplements.join(', ')}</div>`
+          : `<div>✅ 全部按时服用</div>`;
+
+        // Recommendations
+        const recList = $('#recommendationsList');
+        recList.innerHTML = (insights.recommendations || [])
+          .map(r => `<li>${escapeHtml(r)}</li>`)
+          .join('') || `<li>${t('noDataYet')}</li>`;
+
+        // Correlations
+        const corrSection = $('#correlationsSection');
+        const corrList = $('#correlationsList');
+        if (insights.correlations?.length) {
+          corrSection.hidden = false;
+          corrList.innerHTML = insights.correlations
+            .map(c => `<li>${escapeHtml(c)}</li>`)
+            .join('');
+        } else {
+          corrSection.hidden = true;
+        }
+
+        loading.hidden = true;
+        content.hidden = false;
+        gtmEvent('view_health_insights', { score: insights.overall_score });
+
+      } catch (err) {
+        console.error('Load health insights error:', err);
+        loading.hidden = true;
+        error.hidden = false;
+      }
+    }
+
     renderIndex();
 
     // 后台同步待同步的餐食和加载运动数据
+    updateLatestWeight().catch(() => {});
+    loadSupplements().then(() => loadTodaySupplementLogs()).catch(() => {});
     syncPendingMeals().catch(() => {});
     loadExerciseFromAPI().then(ex => {
       if (ex) {

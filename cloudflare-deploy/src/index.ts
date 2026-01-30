@@ -649,6 +649,213 @@ app.get('/api/activity/sync', async (c) => {
   return c.json({ activities, count: activities.length });
 });
 
+// ============== Body Metrics API ==============
+
+// Save body metrics (weight, body fat, etc.)
+app.post('/api/body-metrics', async (c) => {
+  const userId = c.get('userId');
+  const body = await c.req.json();
+
+  const measuredAt = body.measured_at || isoNow();
+  const weightKg = body.weight_kg !== undefined ? Number(body.weight_kg) : null;
+  const bodyFatPct = body.body_fat_pct !== undefined ? Number(body.body_fat_pct) : null;
+  const muscleMassKg = body.muscle_mass_kg !== undefined ? Number(body.muscle_mass_kg) : null;
+  const waterPct = body.water_pct !== undefined ? Number(body.water_pct) : null;
+  const notes = body.notes || null;
+  const source = body.source || 'manual';
+
+  // Calculate BMI if weight is provided and user has height in profile
+  let bmi = null;
+  if (weightKg) {
+    const goalResult = await c.env.DB.prepare(
+      'SELECT profile FROM user_goals WHERE user_id = ?'
+    ).bind(userId).first() as any;
+    
+    if (goalResult?.profile) {
+      try {
+        const profile = JSON.parse(goalResult.profile);
+        const heightCm = profile.height;
+        if (heightCm) {
+          const heightM = heightCm / 100;
+          bmi = Math.round((weightKg / (heightM * heightM)) * 10) / 10;
+        }
+      } catch {}
+    }
+  }
+
+  const result = await c.env.DB.prepare(`
+    INSERT INTO body_metrics (user_id, measured_at, weight_kg, body_fat_pct, muscle_mass_kg, water_pct, bmi, notes, source, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(userId, measuredAt, weightKg, bodyFatPct, muscleMassKg, waterPct, bmi, notes, source, isoNow()).run();
+
+  return c.json({
+    success: true,
+    metric: { id: result.meta?.last_row_id, weight_kg: weightKg, body_fat_pct: bodyFatPct, bmi, measured_at: measuredAt }
+  });
+});
+
+// Get body metrics history
+app.get('/api/body-metrics', async (c) => {
+  const userId = c.get('userId');
+  const limit = Number(c.req.query('limit')) || 30;
+  const offset = Number(c.req.query('offset')) || 0;
+
+  const results = await c.env.DB.prepare(`
+    SELECT * FROM body_metrics WHERE user_id = ? ORDER BY measured_at DESC LIMIT ? OFFSET ?
+  `).bind(userId, limit, offset).all();
+
+  return c.json({
+    metrics: results.results,
+    count: results.results.length
+  });
+});
+
+// Get latest body metrics
+app.get('/api/body-metrics/latest', async (c) => {
+  const userId = c.get('userId');
+
+  const result = await c.env.DB.prepare(
+    'SELECT * FROM body_metrics WHERE user_id = ? ORDER BY measured_at DESC LIMIT 1'
+  ).bind(userId).first();
+
+  return c.json({ metric: result || null });
+});
+
+// Delete body metric
+app.delete('/api/body-metrics/:id', async (c) => {
+  const userId = c.get('userId');
+  const id = c.req.param('id');
+
+  await c.env.DB.prepare(
+    'DELETE FROM body_metrics WHERE id = ? AND user_id = ?'
+  ).bind(id, userId).run();
+
+  return c.json({ success: true });
+});
+
+// ============== Supplements API ==============
+
+// Create supplement
+app.post('/api/supplements', async (c) => {
+  const userId = c.get('userId');
+  const body = await c.req.json();
+
+  const name = body.name;
+  const dosage = body.dosage || null;
+  const frequency = body.frequency || null;
+  const timeOfDay = body.time_of_day || null;
+  const notes = body.notes || null;
+  const now = isoNow();
+
+  if (!name) {
+    return c.json({ error: 'Name is required' }, 400);
+  }
+
+  const result = await c.env.DB.prepare(`
+    INSERT INTO supplements (user_id, name, dosage, frequency, time_of_day, notes, active, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
+  `).bind(userId, name, dosage, frequency, timeOfDay, notes, now, now).run();
+
+  return c.json({
+    success: true,
+    supplement: { id: result.meta?.last_row_id, name, dosage, frequency, time_of_day: timeOfDay }
+  });
+});
+
+// Get all supplements
+app.get('/api/supplements', async (c) => {
+  const userId = c.get('userId');
+  const includeInactive = c.req.query('include_inactive') === 'true';
+
+  const query = includeInactive
+    ? 'SELECT * FROM supplements WHERE user_id = ? ORDER BY name'
+    : 'SELECT * FROM supplements WHERE user_id = ? AND active = 1 ORDER BY name';
+
+  const results = await c.env.DB.prepare(query).bind(userId).all();
+
+  return c.json({ supplements: results.results });
+});
+
+// Update supplement
+app.put('/api/supplements/:id', async (c) => {
+  const userId = c.get('userId');
+  const id = c.req.param('id');
+  const body = await c.req.json();
+
+  const updates: string[] = [];
+  const values: any[] = [];
+
+  if (body.name !== undefined) { updates.push('name = ?'); values.push(body.name); }
+  if (body.dosage !== undefined) { updates.push('dosage = ?'); values.push(body.dosage); }
+  if (body.frequency !== undefined) { updates.push('frequency = ?'); values.push(body.frequency); }
+  if (body.time_of_day !== undefined) { updates.push('time_of_day = ?'); values.push(body.time_of_day); }
+  if (body.notes !== undefined) { updates.push('notes = ?'); values.push(body.notes); }
+  if (body.active !== undefined) { updates.push('active = ?'); values.push(body.active ? 1 : 0); }
+
+  if (updates.length === 0) {
+    return c.json({ error: 'No fields to update' }, 400);
+  }
+
+  updates.push('updated_at = ?');
+  values.push(isoNow());
+  values.push(id);
+  values.push(userId);
+
+  await c.env.DB.prepare(`
+    UPDATE supplements SET ${updates.join(', ')} WHERE id = ? AND user_id = ?
+  `).bind(...values).run();
+
+  return c.json({ success: true });
+});
+
+// Delete supplement
+app.delete('/api/supplements/:id', async (c) => {
+  const userId = c.get('userId');
+  const id = c.req.param('id');
+
+  await c.env.DB.prepare(
+    'DELETE FROM supplements WHERE id = ? AND user_id = ?'
+  ).bind(id, userId).run();
+
+  return c.json({ success: true });
+});
+
+// Log supplement intake
+app.post('/api/supplements/:id/log', async (c) => {
+  const userId = c.get('userId');
+  const supplementId = c.req.param('id');
+  const body = await c.req.json();
+
+  const takenAt = body.taken_at || isoNow();
+  const notes = body.notes || null;
+
+  const result = await c.env.DB.prepare(`
+    INSERT INTO supplement_logs (user_id, supplement_id, taken_at, notes, created_at)
+    VALUES (?, ?, ?, ?, ?)
+  `).bind(userId, supplementId, takenAt, notes, isoNow()).run();
+
+  return c.json({
+    success: true,
+    log: { id: result.meta?.last_row_id, supplement_id: supplementId, taken_at: takenAt }
+  });
+});
+
+// Get supplement logs for a day
+app.get('/api/supplement-logs', async (c) => {
+  const userId = c.get('userId');
+  const day = c.req.query('day') || todayIso();
+
+  const results = await c.env.DB.prepare(`
+    SELECT sl.*, s.name as supplement_name, s.dosage
+    FROM supplement_logs sl
+    JOIN supplements s ON sl.supplement_id = s.id
+    WHERE sl.user_id = ? AND date(sl.taken_at) = ?
+    ORDER BY sl.taken_at DESC
+  `).bind(userId, day).all();
+
+  return c.json({ logs: results.results });
+});
+
 // ============== Stats API ==============
 
 app.get('/api/stats/daily', async (c) => {
@@ -837,6 +1044,178 @@ ${meals.map(m => `- ${m.eaten_at} ${m.meal_type}: ${m.items.map((i: any) => i.na
 
   } catch (e: any) {
     return c.json({ week_start: weekStartStr, meals_count: meals.length, insights: null, error: e.message });
+  }
+});
+
+// Comprehensive health insights (diet + exercise + weight + supplements)
+app.get('/api/insights/health', async (c) => {
+  const userId = c.get('userId');
+  const AI_GATEWAY_URL = c.env.AI_GATEWAY_URL || 'https://edge-ai-gateway.duizhan.app';
+  const AI_GATEWAY_KEY = c.env.AI_GATEWAY_KEY;
+  const lang = c.req.query('lang') || 'zh';
+
+  // Get last 7 days of data
+  const today = new Date();
+  const weekAgo = new Date(today);
+  weekAgo.setDate(today.getDate() - 7);
+  const weekAgoStr = weekAgo.toISOString().substring(0, 10);
+
+  // Parallel fetch all data
+  const [mealsResult, activityResult, weightResult, supplementsResult, logsResult, goalResult] = await Promise.all([
+    c.env.DB.prepare('SELECT * FROM meals WHERE user_id = ? AND date(eaten_at) >= ? ORDER BY eaten_at ASC').bind(userId, weekAgoStr).all(),
+    c.env.DB.prepare('SELECT * FROM daily_activity WHERE user_id = ? AND day_iso >= ? ORDER BY day_iso ASC').bind(userId, weekAgoStr).all(),
+    c.env.DB.prepare('SELECT * FROM body_metrics WHERE user_id = ? AND date(measured_at) >= ? ORDER BY measured_at ASC').bind(userId, weekAgoStr).all(),
+    c.env.DB.prepare('SELECT * FROM supplements WHERE user_id = ? AND active = 1').bind(userId).all(),
+    c.env.DB.prepare('SELECT * FROM supplement_logs WHERE user_id = ? AND date(taken_at) >= ?').bind(userId, weekAgoStr).all(),
+    c.env.DB.prepare('SELECT * FROM user_goals WHERE user_id = ?').bind(userId).first()
+  ]);
+
+  // Process data
+  const meals = mealsResult.results.map((row: any) => ({
+    meal_type: row.meal_type,
+    eaten_at: row.eaten_at,
+    totals: JSON.parse(row.totals)
+  }));
+
+  const activities = activityResult.results.map((row: any) => ({
+    day: row.day_iso,
+    exercise_kcal: row.exercise_kcal,
+    steps: row.steps,
+    active_minutes: row.active_minutes
+  }));
+
+  const weights = weightResult.results.map((row: any) => ({
+    date: row.measured_at,
+    weight_kg: row.weight_kg,
+    body_fat_pct: row.body_fat_pct
+  }));
+
+  const supplements = supplementsResult.results as any[];
+  const supplementLogs = logsResult.results as any[];
+  
+  // Calculate supplement compliance
+  const totalDays = 7;
+  const supplementDaysLogged: Record<number, Set<string>> = {};
+  supplementLogs.forEach((log: any) => {
+    const day = log.taken_at.substring(0, 10);
+    if (!supplementDaysLogged[log.supplement_id]) supplementDaysLogged[log.supplement_id] = new Set();
+    supplementDaysLogged[log.supplement_id].add(day);
+  });
+
+  const supplementCompliance = supplements.map(s => ({
+    name: s.name,
+    days_taken: supplementDaysLogged[s.id]?.size || 0,
+    compliance_pct: Math.round(((supplementDaysLogged[s.id]?.size || 0) / totalDays) * 100)
+  }));
+
+  const goal = goalResult ? {
+    goal_type: goalResult.goal_type,
+    targets: JSON.parse(goalResult.targets as string),
+    profile: JSON.parse(goalResult.profile as string)
+  } : null;
+
+  // Build comprehensive prompt
+  const langInstructions: Record<string, string> = {
+    zh: '用中文回答。',
+    en: 'Answer in English.',
+    ja: '日本語で答えてください。'
+  };
+
+  const prompt = `你是一位专业的健康顾问。请分析用户过去7天的综合健康数据，给出个性化建议。
+
+${langInstructions[lang] || langInstructions.zh}
+
+**用户目标**: ${goal ? goal.goal_type : '未设置'} (${goal?.profile?.sex === 'male' ? '男' : '女'}, ${goal?.profile?.age || '--'}岁, ${goal?.profile?.height || '--'}cm)
+${goal ? `**每日目标**: ${goal.targets.kcal}kcal, P${goal.targets.protein_g}g, C${goal.targets.carbs_g}g, F${goal.targets.fat_g}g` : ''}
+
+**饮食数据** (${meals.length}餐):
+${meals.length > 0 ? meals.map(m => `- ${m.eaten_at.substring(5, 10)} ${m.meal_type}: ${m.totals.kcal}kcal, P${m.totals.protein_g || 0}g`).join('\n') : '无记录'}
+
+**运动数据**:
+${activities.length > 0 ? activities.map(a => `- ${a.day}: ${a.exercise_kcal}kcal消耗, ${a.steps}步, ${a.active_minutes}分钟`).join('\n') : '无运动记录'}
+
+**体重变化**:
+${weights.length > 0 ? weights.map(w => `- ${w.date.substring(0, 10)}: ${w.weight_kg}kg${w.body_fat_pct ? ` (体脂${w.body_fat_pct}%)` : ''}`).join('\n') : '无体重记录'}
+
+**补剂服用情况**:
+${supplementCompliance.length > 0 ? supplementCompliance.map(s => `- ${s.name}: ${s.days_taken}/7天 (${s.compliance_pct}%)`).join('\n') : '未设置补剂'}
+
+请综合分析并返回JSON格式:
+{
+  "overall_score": 1-100,
+  "diet_analysis": {
+    "score": 1-100,
+    "avg_daily_kcal": 数字,
+    "protein_adequacy": "足够|不足|过量",
+    "issues": ["问题1", "问题2"]
+  },
+  "exercise_analysis": {
+    "score": 1-100,
+    "avg_daily_steps": 数字,
+    "total_active_minutes": 数字,
+    "assessment": "评价"
+  },
+  "weight_analysis": {
+    "trend": "上升|下降|稳定|无数据",
+    "change_kg": 数字或null,
+    "assessment": "评价"
+  },
+  "supplement_compliance": {
+    "overall_pct": 数字,
+    "missed_supplements": ["名称"]
+  },
+  "correlations": ["发现的关联，如：运动多的日子吃得也多"],
+  "recommendations": ["具体可行的建议1", "建议2", "建议3"],
+  "focus_this_week": "本周最应该关注的一件事"
+}
+
+只返回JSON，不要markdown代码块或其他文字。`;
+
+  try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (AI_GATEWAY_KEY) {
+      headers['Authorization'] = `Bearer ${AI_GATEWAY_KEY}`;
+    }
+
+    const response = await fetch(`${AI_GATEWAY_URL}/v1/chat/completions`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 1500
+      })
+    });
+
+    if (!response.ok) {
+      return c.json({ success: false, error: 'AI service unavailable' }, 500);
+    }
+
+    const aiResult = await response.json() as any;
+    const content = aiResult.choices?.[0]?.message?.content || '';
+
+    let insights;
+    try {
+      const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, content];
+      insights = JSON.parse(jsonMatch[1].trim());
+    } catch {
+      insights = { overall_score: 50, focus_this_week: content.substring(0, 200), recommendations: [] };
+    }
+
+    return c.json({
+      success: true,
+      period: { start: weekAgoStr, end: today.toISOString().substring(0, 10) },
+      data_summary: {
+        meals_count: meals.length,
+        exercise_days: activities.length,
+        weight_records: weights.length,
+        supplements_tracked: supplements.length
+      },
+      insights
+    });
+
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message }, 500);
   }
 });
 

@@ -55,3 +55,46 @@ CREATE TABLE IF NOT EXISTS daily_activity (
     UNIQUE(user_id, day_iso)
 );
 CREATE INDEX IF NOT EXISTS idx_activity_user_day ON daily_activity(user_id, day_iso);
+
+-- Body metrics table (weight, body fat, etc.)
+CREATE TABLE IF NOT EXISTS body_metrics (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    measured_at TEXT NOT NULL,
+    weight_kg REAL,
+    body_fat_pct REAL,
+    muscle_mass_kg REAL,
+    water_pct REAL,
+    bmi REAL,
+    notes TEXT,
+    source TEXT DEFAULT 'manual',
+    created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_body_metrics_user_date ON body_metrics(user_id, measured_at);
+
+-- Supplements/Medications table
+CREATE TABLE IF NOT EXISTS supplements (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    dosage TEXT,
+    frequency TEXT,
+    time_of_day TEXT,
+    notes TEXT,
+    active INTEGER DEFAULT 1,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_supplements_user ON supplements(user_id, active);
+
+-- Supplement intake log
+CREATE TABLE IF NOT EXISTS supplement_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    supplement_id INTEGER NOT NULL,
+    taken_at TEXT NOT NULL,
+    notes TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (supplement_id) REFERENCES supplements(id)
+);
+CREATE INDEX IF NOT EXISTS idx_supplement_logs_user_date ON supplement_logs(user_id, taken_at);
