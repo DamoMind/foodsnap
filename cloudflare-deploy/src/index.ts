@@ -275,6 +275,13 @@ app.get('/api/health', (c) => {
   return c.json({ ok: true, time: isoNow() });
 });
 
+// Public config (safe to expose)
+app.get('/api/config', (c) => {
+  return c.json({
+    googleClientId: c.env.GOOGLE_CLIENT_ID || null,
+  });
+});
+
 // Google OAuth
 app.post('/api/auth/google', async (c) => {
   const googleClientId = c.env.GOOGLE_CLIENT_ID;
@@ -284,12 +291,39 @@ app.post('/api/auth/google', async (c) => {
 
   const body = await c.req.json();
   const idToken = body.id_token || body.credential;
+  const accessToken = body.access_token;
+  const userInfo = body.user_info;
   
-  if (!idToken) {
-    return c.json({ error: 'id_token is required' }, 400);
+  let googleUser = null;
+
+  // Method 1: ID token verification (One Tap flow)
+  if (idToken) {
+    googleUser = await verifyGoogleToken(idToken, googleClientId);
+  }
+  // Method 2: Access token + user info (popup flow)
+  else if (accessToken && userInfo) {
+    // Verify the access token is valid
+    try {
+      const tokenInfoRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?access_token=${accessToken}`);
+      if (tokenInfoRes.ok) {
+        const tokenInfo = await tokenInfoRes.json() as any;
+        // Verify the token was issued for our client
+        if (tokenInfo.aud === googleClientId || tokenInfo.azp === googleClientId) {
+          googleUser = {
+            provider_id: userInfo.sub,
+            email: userInfo.email,
+            name: userInfo.name || userInfo.email?.split('@')[0] || 'User',
+            avatar_url: userInfo.picture || null,
+          };
+        } else {
+          console.error('Access token client mismatch:', tokenInfo.aud, tokenInfo.azp, 'vs', googleClientId);
+        }
+      }
+    } catch (e) {
+      console.error('Access token verification failed:', e);
+    }
   }
 
-  const googleUser = await verifyGoogleToken(idToken, googleClientId);
   if (!googleUser) {
     return c.json({ error: 'Invalid Google token' }, 401);
   }
@@ -326,7 +360,7 @@ app.post('/api/auth/google', async (c) => {
   const token = await createJwt(user.id as string, c.env);
 
   return c.json({
-    token,
+    access_token: token,
     user: {
       id: user.id,
       email: user.email,
@@ -814,7 +848,7 @@ app.post('/api/analyze', async (c) => {
 
   try {
     const formData = await c.req.formData();
-    const imageFile = formData.get('image') as File | null;
+    const imageFile = (formData.get('image') || formData.get('file')) as File | null;
     const lang = (formData.get('lang') as string) || 'zh';
 
     if (!imageFile) {
@@ -889,7 +923,7 @@ app.post('/api/analyze', async (c) => {
       method: 'POST',
       headers,
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'gpt-4o',
         messages: [{
           role: 'user',
           content: [

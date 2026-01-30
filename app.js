@@ -813,23 +813,29 @@
       // result = { ai: {...}, meal_preview: { items, totals, warnings } }
 
       // 转换后端返回的 items 到前端格式
+      // 后端返回: { kcal, protein_g, carbs_g, fat_g } 直接在 item 上
       const items = (result.meal_preview?.items || []).map((it) => {
+        const weight = it.weight_g || 100;
+        const kcal = it.kcal || 0;
+        const protein = it.protein_g || 0;
+        const carbs = it.carbs_g || 0;
+        const fat = it.fat_g || 0;
         return {
           id: cryptoRandomId(),
           foodId: it.name,
           name: it.name,
           confidence: it.confidence || 0.85,
-          weight_g: it.weight_g || 100,
+          weight_g: weight,
           manual: false,
-          kcal: round1(it.nutrition?.kcal || 0),
-          p: round1(it.nutrition?.protein_g || 0),
-          c: round1(it.nutrition?.carbs_g || 0),
-          f: round1(it.nutrition?.fat_g || 0),
+          kcal: round1(kcal),
+          p: round1(protein),
+          c: round1(carbs),
+          f: round1(fat),
           per100: {
-            kcal: round1((it.nutrition?.kcal || 0) / (it.weight_g || 100) * 100),
-            p: round1((it.nutrition?.protein_g || 0) / (it.weight_g || 100) * 100),
-            c: round1((it.nutrition?.carbs_g || 0) / (it.weight_g || 100) * 100),
-            f: round1((it.nutrition?.fat_g || 0) / (it.weight_g || 100) * 100)
+            kcal: round1(kcal / weight * 100),
+            p: round1(protein / weight * 100),
+            c: round1(carbs / weight * 100),
+            f: round1(fat / weight * 100)
           }
         };
       });
@@ -1095,23 +1101,72 @@
   }
 
   function showGoogleSignInPopup() {
-    // Fallback popup sign-in using OAuth 2.0 with ID token
-    const client = google.accounts.oauth2.initCodeClient({
+    // Fallback popup sign-in using OAuth 2.0 implicit flow to get ID token
+    const client = google.accounts.oauth2.initTokenClient({
       client_id: window.GOOGLE_CLIENT_ID,
       scope: 'openid email profile',
-      ux_mode: 'popup',
-      callback: async (response) => {
-        if (response.error) {
-          console.error('Google auth error:', response.error);
+      callback: async (tokenResponse) => {
+        if (tokenResponse.error) {
+          console.error('Google auth error:', tokenResponse.error);
           showToast(currentLang === 'zh' ? '登录失败' : 'Login failed');
           return;
         }
-        // For code flow, we'd need to exchange the code on backend
-        // For now, show a message that One Tap is required
-        showToast(currentLang === 'zh' ? '请允许 Google 弹出窗口' : 'Please allow Google popup');
+
+        try {
+          // Get ID token info from Google's userinfo endpoint
+          const userInfoRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+            headers: { 'Authorization': `Bearer ${tokenResponse.access_token}` }
+          });
+          
+          if (!userInfoRes.ok) {
+            throw new Error('Failed to get user info');
+          }
+          
+          const userInfo = await userInfoRes.json();
+          
+          // Send to our backend - we need to verify via a different method
+          // Since we have access_token, use Google's tokeninfo endpoint to verify
+          const tokenInfoRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?access_token=${tokenResponse.access_token}`);
+          const tokenInfo = await tokenInfoRes.json();
+          
+          // Create a pseudo ID token payload for our backend
+          // Our backend will need to accept access_token based auth too
+          const authRes = await fetch(`${API_BASE}/api/auth/google`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              access_token: tokenResponse.access_token,
+              user_info: userInfo
+            })
+          });
+
+          if (!authRes.ok) {
+            const err = await authRes.json().catch(() => ({}));
+            throw new Error(err.error || 'Auth failed');
+          }
+
+          const data = await authRes.json();
+          setAuthState(data.access_token, data.user);
+
+          // Check if we should link legacy data
+          const legacyUserId = localStorage.getItem(LS_KEYS.userId);
+          if (legacyUserId && legacyUserId !== data.user.id) {
+            await linkLegacyAccount(legacyUserId);
+          }
+
+          showToast(currentLang === 'zh' ? '登录成功，正在同步数据...' : currentLang === 'ja' ? 'ログイン成功、データ同期中...' : 'Login successful, syncing data...');
+          setSheetOpen($('#authSheet'), false);
+
+          // 登录后从云端同步数据
+          syncFromCloud();
+
+        } catch (err) {
+          console.error('Google popup login error:', err);
+          showToast(currentLang === 'zh' ? '登录失败: ' + err.message : 'Login failed: ' + err.message);
+        }
       }
     });
-    client.requestCode();
+    client.requestAccessToken();
   }
 
   async function linkLegacyAccount(legacyUserId) {
@@ -2603,7 +2658,20 @@
   }
 
   // ====== Boot ======
-  function boot() {
+  async function boot() {
+    // Fetch public config from API
+    try {
+      const res = await fetch('/api/config');
+      if (res.ok) {
+        const config = await res.json();
+        if (config.googleClientId) {
+          window.GOOGLE_CLIENT_ID = config.googleClientId;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to fetch config:', e);
+    }
+
     const path = location.pathname.split('/').pop() || 'index.html';
     if (path === 'dashboard.html') initDashboard();
     else initIndex();
