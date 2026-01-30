@@ -1729,7 +1729,18 @@
         // Sync range slider
         const rangeInput = wrap.querySelector(`input[type="range"][data-id="${CSS.escape(id)}"]`);
         if (rangeInput) rangeInput.value = Math.min(newVal, 800);
-        renderResultSheet(meal);
+        // Update UI without rebuilding DOM (keeps keyboard open)
+        const foodItem = numInput.closest('.food-item');
+        if (foodItem) {
+          const badge = foodItem.querySelector('.badge');
+          if (badge) badge.textContent = round0(it.kcal) + ' kcal';
+        }
+        // Update meal summary
+        meal.summary = sumMealItems(meal.items);
+        $('#mealKcal').textContent = round0(meal.summary.kcal);
+        $('#mealP').textContent = round0(meal.summary.p);
+        $('#mealC').textContent = round0(meal.summary.c);
+        $('#mealF').textContent = round0(meal.summary.f);
         return;
       }
     };
