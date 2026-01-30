@@ -810,6 +810,7 @@
       }
 
       const result = await response.json();
+      console.log('AI 识别成功，返回数据:', result);
       // result = { ai: {...}, meal_preview: { items, totals, warnings } }
 
       // 转换后端返回的 items 到前端格式
@@ -846,6 +847,8 @@
       };
     } catch (err) {
       console.error('AI 识别失败:', err);
+      console.error('错误详情:', err.message, err.stack);
+      alert('AI 识别出错: ' + err.message + '\n将使用模拟数据');
       // 降级到本地模拟
       return fallbackLocalAnalysis();
     }
