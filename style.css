@@ -721,3 +721,66 @@ button, input, select{font:inherit}
   background: var(--primary);
   border-radius: 2px;
 }
+
+/* Exercise screenshot recognition */
+.btn--outline {
+  background: transparent;
+  border: 2px dashed var(--primary);
+  color: var(--primary);
+}
+.btn--outline:hover {
+  background: var(--primary-light);
+}
+.btn--block {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.divider-text {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.85em;
+  margin: 16px 0;
+}
+.divider-text::before,
+.divider-text::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid var(--border);
+}
+.divider-text span {
+  padding: 0 12px;
+}
+
+.recognizing-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  background: var(--bg-muted);
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-size: 0.9em;
+}
+
+.spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.exercise-screenshot-section {
+  margin-bottom: 8px;
+}

@@ -993,6 +993,126 @@ app.post('/api/analyze', async (c) => {
   }
 });
 
+// Exercise screenshot recognition
+app.post('/api/analyze-exercise', async (c) => {
+  const AI_GATEWAY_URL = c.env.AI_GATEWAY_URL || 'https://edge-ai-gateway.duizhan.app';
+  const AI_GATEWAY_KEY = c.env.AI_GATEWAY_KEY;
+
+  try {
+    const formData = await c.req.formData();
+    const imageFile = (formData.get('image') || formData.get('file')) as File | null;
+    const lang = (formData.get('lang') as string) || 'zh';
+
+    if (!imageFile) {
+      return c.json({ error: 'No image provided' }, 400);
+    }
+
+    const arrayBuffer = await imageFile.arrayBuffer();
+    const uint8Array = new Uint8Array(arrayBuffer);
+    let binary = '';
+    const chunkSize = 8192;
+    for (let i = 0; i < uint8Array.length; i += chunkSize) {
+      const chunk = uint8Array.subarray(i, i + chunkSize);
+      binary += String.fromCharCode(...chunk);
+    }
+    const base64Image = btoa(binary);
+    const mimeType = imageFile.type || 'image/jpeg';
+
+    const langInstructions: Record<string, string> = {
+      zh: '所有输出使用中文。',
+      en: 'Output in English.',
+      ja: '日本語で出力してください。'
+    };
+    const langHint = langInstructions[lang] || langInstructions.zh;
+
+    const prompt = `你是一个运动数据识别专家。请分析这张截图，识别其中的运动/健身数据。
+
+**语言要求**: ${langHint}
+
+**识别要求**:
+1. 这可能是 Apple Watch 健身记录、Apple 健康、Strava、Keep、Nike Run Club 等运动 App 的截图
+2. 识别以下关键数据（如果图中有的话）：
+   - 运动消耗的卡路里（主动消耗/运动消耗，不是静息代谢）
+   - 步数
+   - 运动时长（活动时间/运动时间/锻炼时长）
+   - 运动类型（跑步、骑行、游泳、力量训练等）
+   - 运动距离
+3. 如果是 Apple Watch 的三环，注意：
+   - 红色 Move 环 = 主动消耗卡路里（这是我们要的）
+   - 绿色 Exercise 环 = 运动分钟数
+   - 蓝色 Stand 环 = 站立小时数
+4. 区分 "总消耗" 和 "运动消耗" —— 我们只需要运动消耗
+
+返回严格JSON格式:
+{
+  "exercise_kcal": 运动消耗卡路里(数字，如无法识别返回0),
+  "steps": 步数(数字，如无法识别返回0),
+  "active_minutes": 运动分钟数(数字，如无法识别返回0),
+  "exercise_type": "运动类型(如:跑步/骑行/综合/未知)",
+  "distance_km": 运动距离公里数(数字，如无法识别返回null),
+  "confidence": 识别置信度0-1,
+  "source_app": "识别出的App名称(如:Apple Watch/Strava/Keep/未知)",
+  "notes": "可选的备注，比如无法识别某些数据的原因"
+}
+
+只返回JSON，不要markdown代码块或其他文字。`;
+
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (AI_GATEWAY_KEY) {
+      headers['Authorization'] = `Bearer ${AI_GATEWAY_KEY}`;
+    }
+
+    const response = await fetch(`${AI_GATEWAY_URL}/v1/chat/completions`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'text', text: prompt },
+            { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64Image}` } }
+          ]
+        }],
+        max_tokens: 1000
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('AI Gateway error:', errorText);
+      return c.json({ error: 'AI service error', details: errorText }, 500);
+    }
+
+    const aiResult = await response.json() as any;
+    const content = aiResult.choices?.[0]?.message?.content || '';
+
+    let parsed;
+    try {
+      const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, content];
+      parsed = JSON.parse(jsonMatch[1].trim());
+    } catch (e) {
+      console.error('Failed to parse AI response:', content);
+      return c.json({ error: 'Failed to parse AI response', raw: content }, 500);
+    }
+
+    return c.json({
+      exercise_kcal: Math.round(parsed.exercise_kcal || 0),
+      steps: Math.round(parsed.steps || 0),
+      active_minutes: Math.round(parsed.active_minutes || 0),
+      exercise_type: parsed.exercise_type || 'unknown',
+      distance_km: parsed.distance_km || null,
+      confidence: parsed.confidence || 0.8,
+      source_app: parsed.source_app || 'unknown',
+      notes: parsed.notes || null
+    });
+
+  } catch (error: any) {
+    console.error('Exercise analyze error:', error);
+    return c.json({ error: 'Analysis failed', message: error.message }, 500);
+  }
+});
+
 // Serve static files
 app.get('/*', serveStatic({ root: './' }));
 

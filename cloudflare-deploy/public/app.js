@@ -120,6 +120,11 @@
       steps: '步数',
       activeMinutes: '活动时长',
       exerciseHint: '输入运动数据以计算净热量摄入。',
+      scanExerciseScreenshot: '截图识别运动数据',
+      orManualInput: '或手动输入',
+      recognizing: '识别中...',
+      exerciseRecognized: '识别成功',
+      exerciseRecognizeFailed: '识别失败，请手动输入',
       login: '登录',
       logout: '退出登录',
       loginBenefit: '登录后，您的数据将安全保存在云端，可在多设备间同步。',
@@ -240,6 +245,11 @@
       steps: 'Steps',
       activeMinutes: 'Active Minutes',
       exerciseHint: 'Enter your exercise data to calculate net calories.',
+      scanExerciseScreenshot: 'Scan Exercise Screenshot',
+      orManualInput: 'or enter manually',
+      recognizing: 'Recognizing...',
+      exerciseRecognized: 'Recognized',
+      exerciseRecognizeFailed: 'Recognition failed, please enter manually',
       login: 'Login',
       logout: 'Log Out',
       loginBenefit: 'Login to sync your data across devices and keep it safe in the cloud.',
@@ -1524,6 +1534,72 @@
     $('#addExerciseBtn')?.addEventListener('click', () => {
       fillExerciseForm();
       setSheetOpen($('#exerciseSheet'), true);
+    });
+
+    // exercise screenshot recognition
+    $('#exerciseScreenshotInput')?.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      const recognizingEl = $('#exerciseRecognizing');
+      recognizingEl.hidden = false;
+
+      try {
+        // Compress image first
+        const compressed = await compressImage(file, 1280, 0.8);
+        
+        const formData = new FormData();
+        formData.append('file', compressed.blob, 'exercise.jpg');
+        formData.append('lang', currentLang || 'zh');
+
+        const response = await fetch('/api/analyze-exercise', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: formData
+        });
+
+        if (!response.ok) {
+          throw new Error('Recognition failed');
+        }
+
+        const result = await response.json();
+        console.log('Exercise recognition result:', result);
+
+        // Fill in the form
+        if (result.exercise_kcal > 0) {
+          $('#exerciseKcalInput').value = result.exercise_kcal;
+        }
+        if (result.steps > 0) {
+          $('#stepsInput').value = result.steps;
+        }
+        if (result.active_minutes > 0) {
+          $('#activeMinutesInput').value = result.active_minutes;
+        }
+
+        // Show success toast with details
+        const details = [];
+        if (result.exercise_kcal > 0) details.push(`${result.exercise_kcal} kcal`);
+        if (result.steps > 0) details.push(`${result.steps} ${t('steps')}`);
+        if (result.active_minutes > 0) details.push(`${result.active_minutes} min`);
+        
+        if (details.length > 0) {
+          showToast(`✅ ${t('exerciseRecognized')}: ${details.join(', ')}`);
+        } else {
+          showToast(t('exerciseRecognizeFailed'));
+        }
+
+        gtmEvent('exercise_screenshot_recognized', { 
+          kcal: result.exercise_kcal,
+          source: result.source_app 
+        });
+
+      } catch (err) {
+        console.error('Exercise recognition error:', err);
+        showToast(t('exerciseRecognizeFailed'));
+      } finally {
+        recognizingEl.hidden = true;
+        e.target.value = ''; // Reset file input
+      }
     });
 
     // save exercise

@@ -216,6 +216,19 @@
       <div class="sheet__title" data-i18n="exerciseInput">运动输入</div>
       <div class="sheet__body">
         <div class="form">
+          <!-- Screenshot recognition -->
+          <div class="exercise-screenshot-section">
+            <label class="btn btn--outline btn--block" style="margin-bottom: 12px;">
+              <input id="exerciseScreenshotInput" type="file" accept="image/*" hidden />
+              <span>📱</span> <span data-i18n="scanExerciseScreenshot">截图识别运动数据</span>
+            </label>
+            <div id="exerciseRecognizing" class="recognizing-hint" hidden>
+              <span class="spinner"></span> <span data-i18n="recognizing">识别中...</span>
+            </div>
+          </div>
+
+          <div class="divider-text"><span data-i18n="orManualInput">或手动输入</span></div>
+
           <label class="field">
             <span class="field__label" data-i18n="exerciseKcal">运动消耗</span>
             <div class="input-group">
