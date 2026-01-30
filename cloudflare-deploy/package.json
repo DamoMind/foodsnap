@@ -7,10 +7,14 @@
     "deploy": "wrangler deploy",
     "db:create": "wrangler d1 create foodsnap-db",
     "db:migrate": "wrangler d1 execute foodsnap-db --file=./schema.sql",
-    "db:migrate:local": "wrangler d1 execute foodsnap-db --local --file=./schema.sql"
+    "db:migrate:local": "wrangler d1 execute foodsnap-db --local --file=./schema.sql",
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:headed": "playwright test --headed"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240117.0",
+    "@playwright/test": "^1.58.0",
     "typescript": "^5.3.3",
     "wrangler": "^3.22.1"
   },
