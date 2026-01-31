@@ -115,6 +115,12 @@
       exerciseBurned: '消耗',
       netCalories: '净摄入',
       addExercise: '添加运动',
+      energyBalance: '热量收支',
+      bmrTdee: '基础代谢',
+      exerciseBurn: '运动消耗',
+      totalBurn: '总消耗',
+      todayIntake: '今日摄入',
+      calorieBalance: '热量差',
       exerciseInput: '运动输入',
       exerciseKcal: '运动消耗',
       steps: '步数',
@@ -280,6 +286,12 @@
       exerciseBurned: 'Burned',
       netCalories: 'Net Cal',
       addExercise: 'Add Exercise',
+      energyBalance: 'Energy Balance',
+      bmrTdee: 'BMR/TDEE',
+      exerciseBurn: 'Exercise',
+      totalBurn: 'Total Burn',
+      todayIntake: 'Intake',
+      calorieBalance: 'Balance',
       exerciseInput: 'Exercise Input',
       exerciseKcal: 'Calories Burned',
       steps: 'Steps',
@@ -445,6 +457,12 @@
       exerciseBurned: '消費',
       netCalories: '正味カロリー',
       addExercise: '運動を追加',
+      energyBalance: 'エネルギー収支',
+      bmrTdee: '基礎代謝',
+      exerciseBurn: '運動消費',
+      totalBurn: '総消費',
+      todayIntake: '摂取',
+      calorieBalance: '収支',
       exerciseInput: '運動入力',
       exerciseKcal: '消費カロリー',
       steps: '歩数',
@@ -1645,7 +1663,31 @@
         const result = await response.json();
         console.log('Exercise recognition result:', result);
 
-        // Fill in the form
+        // Show confirmation dialog with summary
+        const summary = result.summary || `${result.exercise_kcal} kcal, ${result.steps} 步, ${result.active_minutes} 分钟`;
+        const details = [];
+        if (result.exercise_kcal > 0) details.push(`${result.exercise_kcal} kcal`);
+        if (result.steps > 0) details.push(`${result.steps} ${t('steps')}`);
+        if (result.active_minutes > 0) details.push(`${result.active_minutes} min`);
+        
+        if (details.length === 0) {
+          showToast(t('exerciseRecognizeFailed'));
+          return;
+        }
+
+        // Show confirmation with summary
+        const confirmMsg = currentLang === 'zh' 
+          ? `识别结果：\n${summary}\n\n确认使用这些数据吗？`
+          : currentLang === 'ja'
+          ? `認識結果：\n${summary}\n\nこのデータを使用しますか？`
+          : `Recognition result:\n${summary}\n\nUse this data?`;
+        
+        if (!confirm(confirmMsg)) {
+          showToast(currentLang === 'zh' ? '已取消' : currentLang === 'ja' ? 'キャンセルしました' : 'Cancelled');
+          return;
+        }
+
+        // Fill in the form after confirmation
         if (result.exercise_kcal > 0) {
           $('#exerciseKcalInput').value = result.exercise_kcal;
         }
@@ -1656,17 +1698,7 @@
           $('#activeMinutesInput').value = result.active_minutes;
         }
 
-        // Show success toast with details
-        const details = [];
-        if (result.exercise_kcal > 0) details.push(`${result.exercise_kcal} kcal`);
-        if (result.steps > 0) details.push(`${result.steps} ${t('steps')}`);
-        if (result.active_minutes > 0) details.push(`${result.active_minutes} min`);
-        
-        if (details.length > 0) {
-          showToast(`✅ ${t('exerciseRecognized')}: ${details.join(', ')}`);
-        } else {
-          showToast(t('exerciseRecognizeFailed'));
-        }
+        showToast(`✅ ${t('exerciseRecognized')}: ${details.join(', ')}`)
 
         gtmEvent('exercise_screenshot_recognized', { 
           kcal: result.exercise_kcal,
@@ -2195,6 +2227,11 @@
       const confLabel = t('confidence');
       const sourceLabel = it.manual ? t('manual') : t('recognized');
       const per100Label = t('per100g');
+      // Calculate actual nutrition based on weight
+      const actualP = round1((it.per100.protein_g || 0) * it.weight_g / 100);
+      const actualC = round1((it.per100.carbs_g || 0) * it.weight_g / 100);
+      const actualF = round1((it.per100.fat_g || 0) * it.weight_g / 100);
+      
       el.innerHTML = `
         <div class="food-item__top">
           <div>
@@ -2206,6 +2243,12 @@
           <div class="food-item__kcal">
             <div class="badge">${round0(it.kcal)} kcal</div>
           </div>
+        </div>
+
+        <div class="food-item__nutrition">
+          <span class="food-item__macro food-item__macro--p">P ${actualP}g</span>
+          <span class="food-item__macro food-item__macro--c">C ${actualC}g</span>
+          <span class="food-item__macro food-item__macro--f">F ${actualF}g</span>
         </div>
 
         <div class="food-item__controls">
@@ -2256,6 +2299,13 @@
         if (foodItem) {
           const badge = foodItem.querySelector('.badge');
           if (badge) badge.textContent = round0(it.kcal) + ' kcal';
+          // Update nutrition macros
+          const macroP = foodItem.querySelector('.food-item__macro--p');
+          const macroC = foodItem.querySelector('.food-item__macro--c');
+          const macroF = foodItem.querySelector('.food-item__macro--f');
+          if (macroP) macroP.textContent = `P ${round1((it.per100.protein_g || 0) * it.weight_g / 100)}g`;
+          if (macroC) macroC.textContent = `C ${round1((it.per100.carbs_g || 0) * it.weight_g / 100)}g`;
+          if (macroF) macroF.textContent = `F ${round1((it.per100.fat_g || 0) * it.weight_g / 100)}g`;
         }
         // Update meal summary
         meal.summary = sumMealItems(meal.items);
@@ -2379,11 +2429,19 @@
           eaten_at: new Date(meal.createdAt).toISOString(),
           items: meal.items.map(item => ({
             name: item.name,
-            portion_g: item.portion_g || item.portion?.estimated || 100,
+            weight_g: item.weight_g || item.portion_g || item.portion?.estimated || 100,
+            portion_g: item.weight_g || item.portion_g || item.portion?.estimated || 100,
+            confidence: item.confidence || 0.8,
             kcal: item.kcal || 0,
             protein_g: item.protein_g || item.p || 0,
             carbs_g: item.carbs_g || item.c || 0,
-            fat_g: item.fat_g || item.f || 0
+            fat_g: item.fat_g || item.f || 0,
+            per100: item.per100 || {
+              kcal: 100,
+              protein_g: item.protein_g || item.p || 5,
+              carbs_g: item.carbs_g || item.c || 15,
+              fat_g: item.fat_g || item.f || 5
+            }
           })),
           totals: {
             kcal: (meal.summary?.kcal || 0),
@@ -2531,24 +2589,40 @@
         cloudId: meal.id,
         mealType: meal.meal_type,
         createdAt: meal.eaten_at,
-        items: meal.items.map(item => ({
-          id: cryptoRandomId(),  // Each item needs an id for editing
-          name: item.name,
-          portion_g: item.portion_g,
-          kcal: item.kcal || 0,
-          p: item.protein_g || 0,   // Short field names for sumMealItems
-          c: item.carbs_g || 0,
-          f: item.fat_g || 0,
-          protein_g: item.protein_g || 0,
-          carbs_g: item.carbs_g || 0,
-          fat_g: item.fat_g || 0,
-          per100: {
-            kcal: item.kcal ? Math.round((item.kcal / (item.portion_g || 100)) * 100) : 100,
-            p: item.protein_g ? Math.round((item.protein_g / (item.portion_g || 100)) * 100) : 5,
-            c: item.carbs_g ? Math.round((item.carbs_g / (item.portion_g || 100)) * 100) : 15,
-            f: item.fat_g ? Math.round((item.fat_g / (item.portion_g || 100)) * 100) : 5
-          }
-        })),
+        items: meal.items.map(item => {
+          const portionG = item.weight_g || item.portion_g || 100;
+          const factor = portionG / 100;
+          // Try to get per100 values from item, or reverse-calculate from totals
+          const per100Kcal = item.per100?.kcal || (item.kcal ? Math.round(item.kcal / factor) : 100);
+          const per100P = item.per100?.protein_g || item.per100?.p || (item.protein_g ? Math.round(item.protein_g / factor) : 5);
+          const per100C = item.per100?.carbs_g || item.per100?.c || (item.carbs_g ? Math.round(item.carbs_g / factor) : 15);
+          const per100F = item.per100?.fat_g || item.per100?.f || (item.fat_g ? Math.round(item.fat_g / factor) : 5);
+          
+          return {
+            id: cryptoRandomId(),  // Each item needs an id for editing
+            name: item.name,
+            weight_g: portionG,   // Use weight_g for frontend compatibility
+            portion_g: portionG,
+            confidence: item.confidence || 0.8,
+            kcal: item.kcal || 0,
+            p: item.protein_g || item.p || 0,   // Short field names for sumMealItems
+            c: item.carbs_g || item.c || 0,
+            f: item.fat_g || item.f || 0,
+            protein_g: item.protein_g || item.p || 0,
+            carbs_g: item.carbs_g || item.c || 0,
+            fat_g: item.fat_g || item.f || 0,
+            per100: {
+              kcal: per100Kcal,
+              protein_g: per100P,
+              carbs_g: per100C,
+              fat_g: per100F,
+              // Also keep short names for compatibility
+              p: per100P,
+              c: per100C,
+              f: per100F
+            }
+          };
+        }),
         summary: meal.totals ? {
           kcal: meal.totals.kcal || 0,
           p: meal.totals.protein_g || 0,
@@ -2686,12 +2760,37 @@
     $('#cBar').style.width = `${clamp((s.c / g.c) * 100, 0, 120)}%`;
     $('#fBar').style.width = `${clamp((s.f / g.f) * 100, 0, 120)}%`;
 
-    // exercise data
+    // exercise & energy balance data
     const ex = getExerciseForToday();
     const exerciseKcal = ex.exerciseKcal || 0;
-    const netKcal = round0(s.kcal - exerciseKcal);
+    
+    // Calculate TDEE from profile (same formula as goals)
+    const p = State.profile;
+    let tdee = 0;
+    if (p && p.weight && p.height && p.age) {
+      const sexFactor = p.sex === 'male' ? 5 : -161;
+      const bmr = 10 * p.weight + 6.25 * p.height - 5 * p.age + sexFactor;
+      tdee = round0(bmr * Number(p.activity || 1.2));
+    }
+    
+    // Total burn = TDEE + exercise
+    const totalBurn = tdee + exerciseKcal;
+    // Net = intake - total burn (negative = deficit = good for weight loss)
+    const netKcal = round0(s.kcal - totalBurn);
+    
+    // Update UI
+    $('#tdeeKcal').textContent = tdee > 0 ? tdee : '--';
     $('#exerciseKcal').textContent = exerciseKcal;
-    $('#netKcal').textContent = netKcal;
+    $('#totalBurnKcal').textContent = totalBurn > 0 ? totalBurn : '--';
+    $('#intakeKcal').textContent = round0(s.kcal);
+    $('#netKcal').textContent = (netKcal >= 0 ? '+' : '') + netKcal;
+    
+    // Color the result based on deficit/surplus
+    const resultEl = $('#netKcal').closest('.energy-item');
+    if (resultEl) {
+      resultEl.classList.toggle('deficit', netKcal < 0);
+      resultEl.classList.toggle('surplus', netKcal > 0);
+    }
 
     // advice
     $('#adviceText').textContent = buildAdvice(State.profile, s, exerciseKcal);
@@ -2869,6 +2968,7 @@
           ...getAuthHeaders()
         },
         body: JSON.stringify({
+          day: todayKey(),  // 传入本地日期，避免时区问题
           exercise_kcal: exerciseKcal,
           steps: steps,
           active_minutes: activeMinutes,

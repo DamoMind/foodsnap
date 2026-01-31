@@ -1,8 +1,90 @@
 /* Mobile H5 MVP: 拍照/上传 ->（模拟/可接入）识别 -> 份量校正 -> 保存到今日 -> 今日进度/建议 -> 周统计图
    数据存储：localStorage
    支持中英文切换
+   
+   @version 1.1.0
+   @changelog
+   - 添加网络请求重试机制
+   - 添加简单内存缓存
+   - 优化日期格式化性能
+   - 改进加载状态显示
 */
 (() => {
+  'use strict';
+  
+  // ====== 性能优化：简单内存缓存 ======
+  const _cache = new Map();
+  const CACHE_TTL = 60000; // 1 分钟缓存
+  
+  function getCached(key) {
+    const item = _cache.get(key);
+    if (!item) return null;
+    if (Date.now() > item.expiry) {
+      _cache.delete(key);
+      return null;
+    }
+    return item.value;
+  }
+  
+  function setCache(key, value, ttl = CACHE_TTL) {
+    _cache.set(key, { value, expiry: Date.now() + ttl });
+  }
+  
+  function clearCache(keyPrefix) {
+    if (!keyPrefix) {
+      _cache.clear();
+      return;
+    }
+    for (const key of _cache.keys()) {
+      if (key.startsWith(keyPrefix)) _cache.delete(key);
+    }
+  }
+  
+  // ====== 日期格式化工具 ======
+  const DateUtils = {
+    // 缓存 DateTimeFormat 实例以提高性能
+    _formatters: {},
+    
+    getFormatter(locale, options) {
+      const key = `${locale}-${JSON.stringify(options)}`;
+      if (!this._formatters[key]) {
+        this._formatters[key] = new Intl.DateTimeFormat(locale, options);
+      }
+      return this._formatters[key];
+    },
+    
+    formatDate(date, locale = 'zh-CN', style = 'short') {
+      const options = style === 'short' 
+        ? { month: 'short', day: 'numeric' }
+        : { year: 'numeric', month: 'long', day: 'numeric' };
+      return this.getFormatter(locale, options).format(date instanceof Date ? date : new Date(date));
+    },
+    
+    formatTime(date, locale = 'zh-CN') {
+      return this.getFormatter(locale, { hour: '2-digit', minute: '2-digit' })
+        .format(date instanceof Date ? date : new Date(date));
+    },
+    
+    // 相对时间（如"3分钟前"）
+    relativeTime(date, locale = 'zh-CN') {
+      const now = Date.now();
+      const then = date instanceof Date ? date.getTime() : new Date(date).getTime();
+      const diffMs = now - then;
+      const diffMin = Math.floor(diffMs / 60000);
+      
+      if (diffMin < 1) return locale === 'zh' ? '刚刚' : locale === 'ja' ? 'たった今' : 'just now';
+      if (diffMin < 60) return locale === 'zh' ? `${diffMin}分钟前` : locale === 'ja' ? `${diffMin}分前` : `${diffMin}m ago`;
+      
+      const diffHour = Math.floor(diffMin / 60);
+      if (diffHour < 24) return locale === 'zh' ? `${diffHour}小时前` : locale === 'ja' ? `${diffHour}時間前` : `${diffHour}h ago`;
+      
+      const diffDay = Math.floor(diffHour / 24);
+      if (diffDay < 7) return locale === 'zh' ? `${diffDay}天前` : locale === 'ja' ? `${diffDay}日前` : `${diffDay}d ago`;
+      
+      return this.formatDate(date, locale);
+    }
+  };
+
   // GA4 事件追踪
   function gtmEvent(eventName, params = {}) {
     if (typeof gtag === 'function') {
@@ -115,6 +197,12 @@
       exerciseBurned: '消耗',
       netCalories: '净摄入',
       addExercise: '添加运动',
+      energyBalance: '热量收支',
+      bmrTdee: '基础代谢',
+      exerciseBurn: '运动消耗',
+      totalBurn: '总消耗',
+      todayIntake: '今日摄入',
+      calorieBalance: '热量差',
       exerciseInput: '运动输入',
       exerciseKcal: '运动消耗',
       steps: '步数',
@@ -280,6 +368,12 @@
       exerciseBurned: 'Burned',
       netCalories: 'Net Cal',
       addExercise: 'Add Exercise',
+      energyBalance: 'Energy Balance',
+      bmrTdee: 'BMR/TDEE',
+      exerciseBurn: 'Exercise',
+      totalBurn: 'Total Burn',
+      todayIntake: 'Intake',
+      calorieBalance: 'Balance',
       exerciseInput: 'Exercise Input',
       exerciseKcal: 'Calories Burned',
       steps: 'Steps',
@@ -445,6 +539,12 @@
       exerciseBurned: '消費',
       netCalories: '正味カロリー',
       addExercise: '運動を追加',
+      energyBalance: 'エネルギー収支',
+      bmrTdee: '基礎代謝',
+      exerciseBurn: '運動消費',
+      totalBurn: '総消費',
+      todayIntake: '摂取',
+      calorieBalance: '収支',
       exerciseInput: '運動入力',
       exerciseKcal: '消費カロリー',
       steps: '歩数',
@@ -872,6 +972,39 @@
     });
   }
 
+  // ====== 网络请求工具函数 ======
+  
+  /** 带重试的 fetch 请求 */
+  async function fetchWithRetry(url, options = {}, maxRetries = 2, retryDelay = 1000) {
+    let lastError;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const response = await fetch(url, options);
+        if (!response.ok) {
+          // 4xx 错误不重试
+          if (response.status >= 400 && response.status < 500) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.error?.message || err.detail || `HTTP ${response.status}`);
+          }
+          // 5xx 错误可以重试
+          throw new Error(`HTTP ${response.status}`);
+        }
+        return response;
+      } catch (err) {
+        lastError = err;
+        console.warn(`Request attempt ${attempt + 1} failed:`, err.message);
+        
+        // 网络错误或服务器错误可以重试
+        if (attempt < maxRetries && (err.name === 'TypeError' || err.message.startsWith('HTTP 5'))) {
+          await sleep(retryDelay * (attempt + 1)); // 指数退避
+          continue;
+        }
+        break;
+      }
+    }
+    throw lastError;
+  }
+
   // ====== AI 识别（调用后端 /api/analyze） ======
   async function analyzeFoodImage({ dataUrl, blob }) {
     // 如果有 blob，使用它；否则从 dataUrl 转换
@@ -885,27 +1018,27 @@
     formData.append('file', imageBlob, 'food.jpg');
 
     try {
-      const response = await fetch('/api/analyze', {
+      const response = await fetchWithRetry('/api/analyze', {
         method: 'POST',
         headers: {
           ...getAuthHeaders(),
           'X-Lang': currentLang || 'zh'
         },
         body: formData
-      });
-
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(err.detail || `HTTP ${response.status}`);
-      }
+      }, 2, 1500); // 最多重试2次，延迟1.5秒
 
       const result = await response.json();
       console.log('AI 识别成功，返回数据:', result);
-      // result = { ai: {...}, meal_preview: { items, totals, warnings } }
+      
+      // 检查是否有 API 错误
+      if (result.error) {
+        throw new Error(result.error.message || result.error);
+      }
 
       // 转换后端返回的 items 到前端格式
-      // 后端返回: { kcal, protein_g, carbs_g, fat_g } 直接在 item 上
-      const items = (result.meal_preview?.items || []).map((it) => {
+      // 支持新格式 (successResponse) 和旧格式
+      const mealPreview = result.data?.meal_preview || result.meal_preview;
+      const items = (mealPreview?.items || []).map((it) => {
         const weight = it.weight_g || 100;
         const kcal = it.kcal || 0;
         const protein = it.protein_g || 0;
@@ -933,12 +1066,19 @@
 
       return {
         items,
-        warnings: result.meal_preview?.warnings || []
+        warnings: mealPreview?.warnings || []
       };
     } catch (err) {
       console.error('AI 识别失败:', err);
-      console.error('错误详情:', err.message, err.stack);
-      alert('AI 识别出错: ' + err.message + '\n将使用模拟数据');
+      
+      // 用更友好的 Toast 替代 alert
+      const errorMsg = currentLang === 'zh' 
+        ? `AI 识别失败: ${err.message}` 
+        : currentLang === 'ja'
+        ? `AI認識に失敗: ${err.message}`
+        : `AI recognition failed: ${err.message}`;
+      showToast(errorMsg, 3000);
+      
       // 降级到本地模拟
       return fallbackLocalAnalysis();
     }
@@ -1064,6 +1204,98 @@
       toast.style.animation = 'toastOut 0.3s ease forwards';
       setTimeout(() => toast.remove(), 300);
     }, duration);
+  }
+
+  // ====== 全局加载指示器 ======
+  let _loadingCount = 0;
+  let _loadingEl = null;
+  
+  function showLoading(message) {
+    _loadingCount++;
+    if (_loadingCount > 1 && _loadingEl) {
+      // 更新消息
+      const msgEl = _loadingEl.querySelector('.loading-message');
+      if (msgEl && message) msgEl.textContent = message;
+      return;
+    }
+    
+    _loadingEl = document.createElement('div');
+    _loadingEl.className = 'global-loading';
+    _loadingEl.innerHTML = `
+      <div class="loading-backdrop"></div>
+      <div class="loading-content">
+        <div class="loading-spinner"></div>
+        <div class="loading-message">${message || ''}</div>
+      </div>
+    `;
+    _loadingEl.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 10000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    `;
+    
+    // 添加样式
+    if (!document.getElementById('loading-styles')) {
+      const style = document.createElement('style');
+      style.id = 'loading-styles';
+      style.textContent = `
+        .global-loading .loading-backdrop {
+          position: absolute;
+          top: 0; left: 0; right: 0; bottom: 0;
+          background: rgba(0,0,0,0.4);
+        }
+        .global-loading .loading-content {
+          position: relative;
+          background: #fff;
+          border-radius: 16px;
+          padding: 24px 32px;
+          text-align: center;
+          box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+        }
+        .global-loading .loading-spinner {
+          width: 40px;
+          height: 40px;
+          margin: 0 auto 12px;
+          border: 4px solid #e5e7eb;
+          border-top-color: #0ea5e9;
+          border-radius: 50%;
+          animation: spin 0.8s linear infinite;
+        }
+        .global-loading .loading-message {
+          color: #374151;
+          font-size: 14px;
+          font-weight: 500;
+        }
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+    
+    document.body.appendChild(_loadingEl);
+  }
+  
+  function hideLoading() {
+    _loadingCount = Math.max(0, _loadingCount - 1);
+    if (_loadingCount === 0 && _loadingEl) {
+      _loadingEl.remove();
+      _loadingEl = null;
+    }
+  }
+  
+  function forceHideLoading() {
+    _loadingCount = 0;
+    if (_loadingEl) {
+      _loadingEl.remove();
+      _loadingEl = null;
+    }
   }
 
   // ====== UI helpers ======
@@ -1645,7 +1877,31 @@
         const result = await response.json();
         console.log('Exercise recognition result:', result);
 
-        // Fill in the form
+        // Show confirmation dialog with summary
+        const summary = result.summary || `${result.exercise_kcal} kcal, ${result.steps} 步, ${result.active_minutes} 分钟`;
+        const details = [];
+        if (result.exercise_kcal > 0) details.push(`${result.exercise_kcal} kcal`);
+        if (result.steps > 0) details.push(`${result.steps} ${t('steps')}`);
+        if (result.active_minutes > 0) details.push(`${result.active_minutes} min`);
+        
+        if (details.length === 0) {
+          showToast(t('exerciseRecognizeFailed'));
+          return;
+        }
+
+        // Show confirmation with summary
+        const confirmMsg = currentLang === 'zh' 
+          ? `识别结果：\n${summary}\n\n确认使用这些数据吗？`
+          : currentLang === 'ja'
+          ? `認識結果：\n${summary}\n\nこのデータを使用しますか？`
+          : `Recognition result:\n${summary}\n\nUse this data?`;
+        
+        if (!confirm(confirmMsg)) {
+          showToast(currentLang === 'zh' ? '已取消' : currentLang === 'ja' ? 'キャンセルしました' : 'Cancelled');
+          return;
+        }
+
+        // Fill in the form after confirmation
         if (result.exercise_kcal > 0) {
           $('#exerciseKcalInput').value = result.exercise_kcal;
         }
@@ -1656,17 +1912,7 @@
           $('#activeMinutesInput').value = result.active_minutes;
         }
 
-        // Show success toast with details
-        const details = [];
-        if (result.exercise_kcal > 0) details.push(`${result.exercise_kcal} kcal`);
-        if (result.steps > 0) details.push(`${result.steps} ${t('steps')}`);
-        if (result.active_minutes > 0) details.push(`${result.active_minutes} min`);
-        
-        if (details.length > 0) {
-          showToast(`✅ ${t('exerciseRecognized')}: ${details.join(', ')}`);
-        } else {
-          showToast(t('exerciseRecognizeFailed'));
-        }
+        showToast(`✅ ${t('exerciseRecognized')}: ${details.join(', ')}`)
 
         gtmEvent('exercise_screenshot_recognized', { 
           kcal: result.exercise_kcal,
@@ -2195,6 +2441,11 @@
       const confLabel = t('confidence');
       const sourceLabel = it.manual ? t('manual') : t('recognized');
       const per100Label = t('per100g');
+      // Calculate actual nutrition based on weight
+      const actualP = round1((it.per100.protein_g || 0) * it.weight_g / 100);
+      const actualC = round1((it.per100.carbs_g || 0) * it.weight_g / 100);
+      const actualF = round1((it.per100.fat_g || 0) * it.weight_g / 100);
+      
       el.innerHTML = `
         <div class="food-item__top">
           <div>
@@ -2206,6 +2457,12 @@
           <div class="food-item__kcal">
             <div class="badge">${round0(it.kcal)} kcal</div>
           </div>
+        </div>
+
+        <div class="food-item__nutrition">
+          <span class="food-item__macro food-item__macro--p">P ${actualP}g</span>
+          <span class="food-item__macro food-item__macro--c">C ${actualC}g</span>
+          <span class="food-item__macro food-item__macro--f">F ${actualF}g</span>
         </div>
 
         <div class="food-item__controls">
@@ -2256,6 +2513,13 @@
         if (foodItem) {
           const badge = foodItem.querySelector('.badge');
           if (badge) badge.textContent = round0(it.kcal) + ' kcal';
+          // Update nutrition macros
+          const macroP = foodItem.querySelector('.food-item__macro--p');
+          const macroC = foodItem.querySelector('.food-item__macro--c');
+          const macroF = foodItem.querySelector('.food-item__macro--f');
+          if (macroP) macroP.textContent = `P ${round1((it.per100.protein_g || 0) * it.weight_g / 100)}g`;
+          if (macroC) macroC.textContent = `C ${round1((it.per100.carbs_g || 0) * it.weight_g / 100)}g`;
+          if (macroF) macroF.textContent = `F ${round1((it.per100.fat_g || 0) * it.weight_g / 100)}g`;
         }
         // Update meal summary
         meal.summary = sumMealItems(meal.items);
@@ -2379,11 +2643,19 @@
           eaten_at: new Date(meal.createdAt).toISOString(),
           items: meal.items.map(item => ({
             name: item.name,
-            portion_g: item.portion_g || item.portion?.estimated || 100,
+            weight_g: item.weight_g || item.portion_g || item.portion?.estimated || 100,
+            portion_g: item.weight_g || item.portion_g || item.portion?.estimated || 100,
+            confidence: item.confidence || 0.8,
             kcal: item.kcal || 0,
             protein_g: item.protein_g || item.p || 0,
             carbs_g: item.carbs_g || item.c || 0,
-            fat_g: item.fat_g || item.f || 0
+            fat_g: item.fat_g || item.f || 0,
+            per100: item.per100 || {
+              kcal: 100,
+              protein_g: item.protein_g || item.p || 5,
+              carbs_g: item.carbs_g || item.c || 15,
+              fat_g: item.fat_g || item.f || 5
+            }
           })),
           totals: {
             kcal: (meal.summary?.kcal || 0),
@@ -2531,24 +2803,40 @@
         cloudId: meal.id,
         mealType: meal.meal_type,
         createdAt: meal.eaten_at,
-        items: meal.items.map(item => ({
-          id: cryptoRandomId(),  // Each item needs an id for editing
-          name: item.name,
-          portion_g: item.portion_g,
-          kcal: item.kcal || 0,
-          p: item.protein_g || 0,   // Short field names for sumMealItems
-          c: item.carbs_g || 0,
-          f: item.fat_g || 0,
-          protein_g: item.protein_g || 0,
-          carbs_g: item.carbs_g || 0,
-          fat_g: item.fat_g || 0,
-          per100: {
-            kcal: item.kcal ? Math.round((item.kcal / (item.portion_g || 100)) * 100) : 100,
-            p: item.protein_g ? Math.round((item.protein_g / (item.portion_g || 100)) * 100) : 5,
-            c: item.carbs_g ? Math.round((item.carbs_g / (item.portion_g || 100)) * 100) : 15,
-            f: item.fat_g ? Math.round((item.fat_g / (item.portion_g || 100)) * 100) : 5
-          }
-        })),
+        items: meal.items.map(item => {
+          const portionG = item.weight_g || item.portion_g || 100;
+          const factor = portionG / 100;
+          // Try to get per100 values from item, or reverse-calculate from totals
+          const per100Kcal = item.per100?.kcal || (item.kcal ? Math.round(item.kcal / factor) : 100);
+          const per100P = item.per100?.protein_g || item.per100?.p || (item.protein_g ? Math.round(item.protein_g / factor) : 5);
+          const per100C = item.per100?.carbs_g || item.per100?.c || (item.carbs_g ? Math.round(item.carbs_g / factor) : 15);
+          const per100F = item.per100?.fat_g || item.per100?.f || (item.fat_g ? Math.round(item.fat_g / factor) : 5);
+          
+          return {
+            id: cryptoRandomId(),  // Each item needs an id for editing
+            name: item.name,
+            weight_g: portionG,   // Use weight_g for frontend compatibility
+            portion_g: portionG,
+            confidence: item.confidence || 0.8,
+            kcal: item.kcal || 0,
+            p: item.protein_g || item.p || 0,   // Short field names for sumMealItems
+            c: item.carbs_g || item.c || 0,
+            f: item.fat_g || item.f || 0,
+            protein_g: item.protein_g || item.p || 0,
+            carbs_g: item.carbs_g || item.c || 0,
+            fat_g: item.fat_g || item.f || 0,
+            per100: {
+              kcal: per100Kcal,
+              protein_g: per100P,
+              carbs_g: per100C,
+              fat_g: per100F,
+              // Also keep short names for compatibility
+              p: per100P,
+              c: per100C,
+              f: per100F
+            }
+          };
+        }),
         summary: meal.totals ? {
           kcal: meal.totals.kcal || 0,
           p: meal.totals.protein_g || 0,
@@ -2686,12 +2974,37 @@
     $('#cBar').style.width = `${clamp((s.c / g.c) * 100, 0, 120)}%`;
     $('#fBar').style.width = `${clamp((s.f / g.f) * 100, 0, 120)}%`;
 
-    // exercise data
+    // exercise & energy balance data
     const ex = getExerciseForToday();
     const exerciseKcal = ex.exerciseKcal || 0;
-    const netKcal = round0(s.kcal - exerciseKcal);
+    
+    // Calculate TDEE from profile (same formula as goals)
+    const p = State.profile;
+    let tdee = 0;
+    if (p && p.weight && p.height && p.age) {
+      const sexFactor = p.sex === 'male' ? 5 : -161;
+      const bmr = 10 * p.weight + 6.25 * p.height - 5 * p.age + sexFactor;
+      tdee = round0(bmr * Number(p.activity || 1.2));
+    }
+    
+    // Total burn = TDEE + exercise
+    const totalBurn = tdee + exerciseKcal;
+    // Net = intake - total burn (negative = deficit = good for weight loss)
+    const netKcal = round0(s.kcal - totalBurn);
+    
+    // Update UI
+    $('#tdeeKcal').textContent = tdee > 0 ? tdee : '--';
     $('#exerciseKcal').textContent = exerciseKcal;
-    $('#netKcal').textContent = netKcal;
+    $('#totalBurnKcal').textContent = totalBurn > 0 ? totalBurn : '--';
+    $('#intakeKcal').textContent = round0(s.kcal);
+    $('#netKcal').textContent = (netKcal >= 0 ? '+' : '') + netKcal;
+    
+    // Color the result based on deficit/surplus
+    const resultEl = $('#netKcal').closest('.energy-item');
+    if (resultEl) {
+      resultEl.classList.toggle('deficit', netKcal < 0);
+      resultEl.classList.toggle('surplus', netKcal > 0);
+    }
 
     // advice
     $('#adviceText').textContent = buildAdvice(State.profile, s, exerciseKcal);
@@ -2869,6 +3182,7 @@
           ...getAuthHeaders()
         },
         body: JSON.stringify({
+          day: todayKey(),  // 传入本地日期，避免时区问题
           exercise_kcal: exerciseKcal,
           steps: steps,
           active_minutes: activeMinutes,

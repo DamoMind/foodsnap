@@ -2,12 +2,98 @@
  * FoodSnap API - Cloudflare Workers
  * AI食物识别 + 饮食管理后端
  * 包含完整的 Auth、Sync、Activity、Insights API
+ * 
+ * @version 1.1.0
+ * @changelog
+ * - 添加统一错误处理中间件
+ * - 添加请求验证工具
+ * - 改进 API 响应格式一致性
  */
 
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { serveStatic } from 'hono/cloudflare-workers';
 import * as jose from 'jose';
+
+// ============== Error Handling ==============
+
+/** Custom API Error with status code */
+class ApiError extends Error {
+  constructor(
+    public statusCode: number,
+    message: string,
+    public code?: string
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
+/** Standard API response format */
+interface ApiResponse<T = unknown> {
+  success: boolean;
+  data?: T;
+  error?: {
+    message: string;
+    code?: string;
+  };
+  meta?: {
+    timestamp: string;
+    requestId?: string;
+  };
+}
+
+/** Create success response */
+function successResponse<T>(data: T, meta?: Record<string, any>): ApiResponse<T> {
+  return {
+    success: true,
+    data,
+    meta: {
+      timestamp: new Date().toISOString(),
+      ...meta
+    }
+  };
+}
+
+/** Create error response */
+function errorResponse(message: string, code?: string): ApiResponse {
+  return {
+    success: false,
+    error: { message, code },
+    meta: { timestamp: new Date().toISOString() }
+  };
+}
+
+// ============== Input Validation ==============
+
+/** Validate required fields in request body */
+function validateRequired(body: Record<string, any>, fields: string[]): void {
+  const missing = fields.filter(f => body[f] === undefined || body[f] === null);
+  if (missing.length > 0) {
+    throw new ApiError(400, `Missing required fields: ${missing.join(', ')}`, 'MISSING_FIELDS');
+  }
+}
+
+/** Validate meal type */
+function validateMealType(mealType: string): void {
+  const validTypes = ['breakfast', 'lunch', 'dinner', 'snack'];
+  if (!validTypes.includes(mealType)) {
+    throw new ApiError(400, `Invalid meal_type. Must be one of: ${validTypes.join(', ')}`, 'INVALID_MEAL_TYPE');
+  }
+}
+
+/** Validate numeric range */
+function validateRange(value: number, min: number, max: number, fieldName: string): void {
+  if (value < min || value > max) {
+    throw new ApiError(400, `${fieldName} must be between ${min} and ${max}`, 'OUT_OF_RANGE');
+  }
+}
+
+/** Sanitize string input (prevent XSS) */
+function sanitizeString(input: string, maxLength = 1000): string {
+  if (typeof input !== 'string') return '';
+  return input.slice(0, maxLength).replace(/[<>]/g, '');
+}
 
 // Types
 interface Env {
@@ -69,6 +155,35 @@ app.use('/api/*', cors({
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'X-User-Id', 'Authorization'],
 }));
+
+// Global error handler
+app.onError((err, c) => {
+  console.error('API Error:', err);
+  
+  if (err instanceof ApiError) {
+    return c.json(errorResponse(err.message, err.code), err.statusCode);
+  }
+  
+  // Handle JSON parse errors
+  if (err instanceof SyntaxError && err.message.includes('JSON')) {
+    return c.json(errorResponse('Invalid JSON in request body', 'INVALID_JSON'), 400);
+  }
+  
+  // Generic server error
+  return c.json(errorResponse('Internal server error', 'INTERNAL_ERROR'), 500);
+});
+
+// Request logging middleware (for debugging)
+app.use('/api/*', async (c, next) => {
+  const start = Date.now();
+  await next();
+  const duration = Date.now() - start;
+  
+  // Log slow requests (>2s)
+  if (duration > 2000) {
+    console.warn(`Slow request: ${c.req.method} ${c.req.path} took ${duration}ms`);
+  }
+});
 
 // ============== Auth Helpers ==============
 
@@ -172,6 +287,19 @@ function generateId(): string {
   return crypto.randomUUID();
 }
 
+// ============== Cache Control Helpers ==============
+
+/** Set cache headers for static-like responses */
+function setCacheHeaders(c: any, maxAge: number = 60, staleWhileRevalidate: number = 300): void {
+  c.header('Cache-Control', `public, max-age=${maxAge}, stale-while-revalidate=${staleWhileRevalidate}`);
+}
+
+/** Set no-cache headers for dynamic/sensitive data */
+function setNoCacheHeaders(c: any): void {
+  c.header('Cache-Control', 'private, no-cache, no-store, must-revalidate');
+  c.header('Pragma', 'no-cache');
+}
+
 // Nutrition calculation helpers
 function computeTargets(goalType: string, profile: Record<string, any>): Record<string, any> {
   const weight = Number(profile.weight) || 70;
@@ -272,13 +400,27 @@ function recommendNextMeal(goal: UserGoal | null, totals: MealTotals): Record<st
 // ============== Auth API ==============
 
 app.get('/api/health', (c) => {
-  return c.json({ ok: true, time: isoNow() });
+  // Health check can be cached briefly
+  setCacheHeaders(c, 5, 10);
+  return c.json({ 
+    ok: true, 
+    time: isoNow(),
+    version: '1.1.0'
+  });
 });
 
 // Public config (safe to expose)
 app.get('/api/config', (c) => {
+  // Config rarely changes, cache longer
+  setCacheHeaders(c, 300, 600);
   return c.json({
     googleClientId: c.env.GOOGLE_CLIENT_ID || null,
+    features: {
+      aiAnalysis: true,
+      exerciseTracking: true,
+      supplements: true,
+      healthInsights: true
+    }
   });
 });
 
@@ -508,29 +650,45 @@ app.post('/api/meals', async (c) => {
 
   const { meal_type, items, totals, eaten_at, image_path } = body;
 
-  if (!meal_type || !items || !totals) {
-    return c.json({ error: 'meal_type, items, and totals are required' }, 400);
+  // Validate required fields using helper
+  validateRequired(body, ['meal_type', 'items', 'totals']);
+  validateMealType(meal_type);
+
+  // Validate items is an array with at least one item
+  if (!Array.isArray(items) || items.length === 0) {
+    throw new ApiError(400, 'items must be a non-empty array', 'INVALID_ITEMS');
   }
 
-  if (!['breakfast', 'lunch', 'dinner', 'snack'].includes(meal_type)) {
-    return c.json({ error: 'meal_type must be breakfast, lunch, dinner, or snack' }, 400);
+  // Validate totals has required nutritional fields
+  if (typeof totals !== 'object' || totals.kcal === undefined) {
+    throw new ApiError(400, 'totals must include at least kcal', 'INVALID_TOTALS');
+  }
+
+  // Validate nutritional values are reasonable
+  if (totals.kcal < 0 || totals.kcal > 10000) {
+    throw new ApiError(400, 'kcal must be between 0 and 10000', 'INVALID_CALORIES');
   }
 
   const now = isoNow();
   const eatenAt = eaten_at || now;
+
+  // Validate eaten_at date format if provided
+  if (eaten_at && isNaN(Date.parse(eaten_at))) {
+    throw new ApiError(400, 'Invalid eaten_at date format', 'INVALID_DATE');
+  }
 
   const result = await c.env.DB.prepare(`
     INSERT INTO meals (user_id, meal_type, eaten_at, items, totals, image_path, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(userId, meal_type, eatenAt, JSON.stringify(items), JSON.stringify(totals), image_path || null, now, now).run();
 
-  return c.json({
+  return c.json(successResponse({
     meal: {
       id: result.meta.last_row_id,
       user_id: userId, meal_type, eaten_at: eatenAt, items, totals,
       image_path: image_path || null, created_at: now, updated_at: now
     }
-  });
+  }));
 });
 
 app.get('/api/meals', async (c) => {
@@ -1019,7 +1177,7 @@ ${meals.map(m => `- ${m.eaten_at} ${m.meal_type}: ${m.items.map((i: any) => i.na
       method: 'POST',
       headers,
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'gpt-4o',
         messages: [{ role: 'user', content: prompt }],
         max_tokens: 1000
       })
@@ -1181,7 +1339,7 @@ ${supplementCompliance.length > 0 ? supplementCompliance.map(s => `- ${s.name}: 
       method: 'POST',
       headers,
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'gpt-4o',
         messages: [{ role: 'user', content: prompt }],
         max_tokens: 1500
       })
@@ -1416,11 +1574,13 @@ app.post('/api/analyze-exercise', async (c) => {
    - 运动时长（活动时间/运动时间/锻炼时长）
    - 运动类型（跑步、骑行、游泳、力量训练等）
    - 运动距离
-3. 如果是 Apple Watch 的三环，注意：
-   - 红色 Move 环 = 主动消耗卡路里（这是我们要的）
+3. **Apple Watch/健身 App 截图的重要识别规则**：
+   - **Activity Rings（活动圆环）区域的 Move 数值 = 今日总消耗卡路里（红色环）—— 这是我们要的！**
+   - Sessions/体能训练列表里显示的是**单项运动**的消耗，不是总数
+   - 例如：如果 Activity Rings 显示 "Move 1,624/500 KCAL"，而下面 Sessions 显示某个运动 "715 KCAL"，应该返回 1624，不是 715
    - 绿色 Exercise 环 = 运动分钟数
    - 蓝色 Stand 环 = 站立小时数
-4. 区分 "总消耗" 和 "运动消耗" —— 我们只需要运动消耗
+4. **优先级**：Activity Rings 的 Move 数值 > Sessions 里单项运动的数值
 
 返回严格JSON格式:
 {
@@ -1431,7 +1591,8 @@ app.post('/api/analyze-exercise', async (c) => {
   "distance_km": 运动距离公里数(数字，如无法识别返回null),
   "confidence": 识别置信度0-1,
   "source_app": "识别出的App名称(如:Apple Watch/Strava/Keep/未知)",
-  "notes": "可选的备注，比如无法识别某些数据的原因"
+  "notes": "可选的备注，比如无法识别某些数据的原因",
+  "summary": "用一句话总结识别到的内容，让用户确认。例如：'Apple Watch 显示今日总消耗 1,624 kcal，运动 183 分钟，包含力量训练、跑步 4.59km、步行 3km'"
 }
 
 只返回JSON，不要markdown代码块或其他文字。`;
@@ -1483,7 +1644,8 @@ app.post('/api/analyze-exercise', async (c) => {
       distance_km: parsed.distance_km || null,
       confidence: parsed.confidence || 0.8,
       source_app: parsed.source_app || 'unknown',
-      notes: parsed.notes || null
+      notes: parsed.notes || null,
+      summary: parsed.summary || null
     });
 
   } catch (error: any) {

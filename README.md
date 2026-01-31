@@ -1,4 +1,4 @@
-# FoodSnap
+# FoodSnap 🍱
 
 AI-powered food recognition and nutrition tracking PWA.
 
@@ -6,13 +6,17 @@ Take a photo of your meal, get instant nutrition analysis with calories, protein
 
 ## Features
 
-- Photo-based food recognition using GPT-4o / Claude vision
-- Automatic nutrition calculation per 100g
-- Daily nutrition tracking with progress bars
-- Customizable health goals (weight loss / muscle gain / maintenance)
-- Offline-first PWA with localStorage
-- Multi-language support (Chinese / English)
-- User data isolation per device
+- 📷 **Photo-based food recognition** using GPT-4o vision AI
+- 🧮 **Automatic nutrition calculation** with portion size adjustment
+- 📊 **Daily/weekly nutrition tracking** with progress visualization
+- 🎯 **Customizable health goals** (weight loss / muscle gain / maintenance)
+- 🏃 **Exercise tracking** with Apple Watch screenshot recognition
+- ⚖️ **Body metrics tracking** (weight, body fat)
+- 💊 **Supplement/medication tracking**
+- 🤖 **AI health insights** with personalized recommendations
+- 🔐 **Google OAuth** for cloud sync across devices
+- 📱 **Offline-first PWA** with localStorage fallback
+- 🌍 **Multi-language support** (Chinese / English / Japanese)
 
 ## Demo
 
@@ -21,86 +25,94 @@ Live demo: https://foodsnap.duku.app
 ## Tech Stack
 
 **Frontend:**
-- Vanilla JavaScript (no framework)
+- Vanilla JavaScript (no framework, ~3000 LOC)
 - CSS with CSS Variables for theming
 - PWA with offline support
 
 **Backend:**
-- Python FastAPI
-- Azure OpenAI GPT-4o / Azure Claude for vision
-- SQLite for user data
+- Cloudflare Workers (TypeScript + Hono)
+- Cloudflare D1 (SQLite database)
+- GPT-4o via Edge AI Gateway for vision
 
 ## Quick Start
 
 ### Prerequisites
 
-- Python 3.11+
-- Azure OpenAI API key (with GPT-4o deployment) or Azure Claude API key
+- Node.js 18+
+- Wrangler CLI (`npm install -g wrangler`)
+- Cloudflare account
 
 ### Installation
 
 ```bash
 # Clone the repository
 git clone https://github.com/yourname/foodsnap.git
-cd foodsnap
+cd foodsnap/cloudflare-deploy
 
 # Install dependencies
-pip install -r requirements.txt
+npm install
 
-# Configure environment
-cp .env.example .env
-# Edit .env with your API keys
+# Configure D1 database
+wrangler d1 create foodsnap-db
+# Update wrangler.toml with the database ID
 
-# Run the server
-uvicorn main:app --reload
+# Run database migrations
+wrangler d1 execute foodsnap-db --file=./schema.sql
+
+# Local development
+npm run dev
 ```
 
-Open http://localhost:8000 in your browser.
+Open http://localhost:8787 in your browser.
 
-### Environment Variables
+### Deployment
 
 ```bash
-# Azure OpenAI (GPT-4o)
-AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com
-AZURE_OPENAI_API_KEY=your-api-key
-AZURE_OPENAI_DEPLOYMENT=gpt-4o
-
-# Or Azure Claude
-AZURE_CLAUDE_ENDPOINT=https://your-resource.openai.azure.com/anthropic/v1
-AZURE_CLAUDE_API_KEY=your-api-key
-
-# Vision service selection: "openai", "claude", or "auto"
-VISION_SERVICE=openai
+# Deploy to Cloudflare Workers
+npm run deploy
 ```
 
-## API Endpoints
+### Environment Variables (Cloudflare Secrets)
+
+```bash
+wrangler secret put JWT_SECRET
+wrangler secret put GOOGLE_CLIENT_ID
+wrangler secret put AI_GATEWAY_URL
+wrangler secret put AI_GATEWAY_KEY
+```
+
+## API Documentation
+
+See [cloudflare-deploy/API.md](cloudflare-deploy/API.md) for complete API documentation.
+
+### Key Endpoints
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/health` | GET | Health check |
-| `/api/analyze` | POST | Analyze food image |
-| `/api/meals` | GET | Get today's meals |
-| `/api/meals` | POST | Save a meal |
-| `/api/stats/daily` | GET | Daily nutrition stats |
-| `/api/stats/weekly` | GET | Weekly nutrition stats |
-| `/api/user/goal` | POST | Set nutrition goals |
-| `/api/recommendations` | GET | Get meal recommendations |
+| `/api/analyze` | POST | AI food image analysis |
+| `/api/analyze-exercise` | POST | AI exercise screenshot analysis |
+| `/api/meals` | GET/POST | Meal CRUD |
+| `/api/activity` | GET/POST | Exercise tracking |
+| `/api/body-metrics` | GET/POST | Weight tracking |
+| `/api/supplements` | GET/POST | Supplement tracking |
+| `/api/insights/health` | GET | AI health insights |
 
-## Self-Hosting
+## Project Structure
 
-### Docker
-
-```bash
-docker build -t foodsnap .
-docker run -p 8000:8000 --env-file .env foodsnap
 ```
-
-### Azure Web App
-
-```bash
-# Package and deploy
-zip -r deploy.zip . -x "*.pyc" -x "__pycache__/*" -x ".git/*" -x "*.db"
-az webapp deploy --name your-app --resource-group your-rg --src-path deploy.zip --type zip
+foodsnap/
+├── cloudflare-deploy/     # Production Cloudflare Workers code
+│   ├── src/index.ts       # API backend (TypeScript)
+│   ├── public/            # Frontend static files
+│   │   ├── app.js         # Main app (vanilla JS)
+│   │   ├── index.html     # Main page
+│   │   └── style.css      # Styles
+│   ├── schema.sql         # D1 database schema
+│   ├── API.md             # API documentation
+│   └── wrangler.toml      # Cloudflare config
+├── CHANGELOG.md           # Version history
+└── README.md              # This file
 ```
 
 ## Commercial Use

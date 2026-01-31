@@ -142,33 +142,52 @@ button, input, select{font:inherit}
 .macro__head{display:flex; justify-content:space-between; color:var(--muted); font-size:13px}
 .macro__head b{color:var(--text)}
 
-/* Exercise/Activity Row */
-.exercise-row{
+/* Energy Balance Row */
+.energy-balance{
   margin-top: 12px;
-  padding: 10px 12px;
+  padding: 12px;
   border-radius: 14px;
   border:1px solid var(--border);
-  background: rgba(34,197,94,.08);
-  display:flex;
-  flex-wrap: wrap;
-  align-items:center;
-  gap: 8px 16px;
+  background: var(--surface);
 }
-.exercise-info{
+.energy-balance__header{
   display:flex;
   align-items:center;
   gap:8px;
-  flex:1;
-  min-width:140px;
+  margin-bottom:10px;
+  font-weight:600;
 }
-.exercise-icon{font-size:18px}
-.exercise-label{color:var(--muted); font-size:13px}
-.exercise-value{color:var(--ok); font-weight:600}
-.net-cal{
+.energy-balance__header .text-btn{margin-left:auto}
+.energy-balance__grid{
+  display:grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap:8px;
+}
+@media (max-width:480px){
+  .energy-balance__grid{grid-template-columns: repeat(3, 1fr)}
+}
+.energy-item{
+  text-align:center;
+  padding:8px 4px;
+  border-radius:8px;
+  background:var(--bg);
+}
+.energy-item__label{
+  display:block;
+  font-size:11px;
   color:var(--muted);
-  font-size:13px;
+  margin-bottom:4px;
 }
-.net-cal b{color:var(--primary2)}
+.energy-item__value{
+  font-weight:700;
+  font-size:14px;
+}
+.energy-item--burn .energy-item__value{color:#f97316}
+.energy-item--total .energy-item__value{color:#ef4444}
+.energy-item--intake .energy-item__value{color:#3b82f6}
+.energy-item--result .energy-item__value{color:#22c55e}
+.energy-item--result.deficit .energy-item__value{color:#22c55e}
+.energy-item--result.surplus .energy-item__value{color:#ef4444}
 
 .input-group{
   display:flex;
@@ -383,6 +402,11 @@ button, input, select{font:inherit}
 .food-item__name{font-weight:800}
 .food-item__sub{color:var(--muted); font-size:12px; margin-top:4px}
 .food-item__kcal{white-space:nowrap; text-align:right}
+.food-item__nutrition{display:flex; gap:12px; margin-top:8px; font-size:13px}
+.food-item__macro{padding:2px 8px; border-radius:4px; font-weight:500}
+.food-item__macro--p{background:rgba(59,130,246,0.15); color:#3b82f6}
+.food-item__macro--c{background:rgba(234,179,8,0.15); color:#ca8a04}
+.food-item__macro--f{background:rgba(239,68,68,0.15); color:#ef4444}
 .food-item__controls{display:flex; gap:10px; align-items:center; margin-top:10px}
 .range{flex:1}
 .pill{

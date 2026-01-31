@@ -73,17 +73,35 @@
           </div>
         </div>
 
-        <!-- Exercise/Activity Row -->
-        <div class="exercise-row" id="exerciseRow">
-          <div class="exercise-info">
-            <span class="exercise-icon">🏃</span>
-            <span class="exercise-label" data-i18n="exercise">运动</span>
-            <span class="exercise-value"><span id="exerciseKcal">0</span> kcal <span data-i18n="exerciseBurned">消耗</span></span>
+        <!-- Energy Balance Row -->
+        <div class="energy-balance" id="exerciseRow">
+          <div class="energy-balance__header">
+            <span>📊</span>
+            <span data-i18n="energyBalance">热量收支</span>
+            <button class="text-btn" id="addExerciseBtn" data-i18n="addExercise">添加运动</button>
           </div>
-          <div class="net-cal">
-            <span data-i18n="netCalories">净摄入</span>: <b id="netKcal">0</b> kcal
+          <div class="energy-balance__grid">
+            <div class="energy-item energy-item--burn">
+              <span class="energy-item__label" data-i18n="bmrTdee">基础代谢</span>
+              <span class="energy-item__value"><span id="tdeeKcal">--</span></span>
+            </div>
+            <div class="energy-item energy-item--burn">
+              <span class="energy-item__label" data-i18n="exerciseBurn">运动消耗</span>
+              <span class="energy-item__value">+<span id="exerciseKcal">0</span></span>
+            </div>
+            <div class="energy-item energy-item--total">
+              <span class="energy-item__label" data-i18n="totalBurn">总消耗</span>
+              <span class="energy-item__value"><span id="totalBurnKcal">--</span></span>
+            </div>
+            <div class="energy-item energy-item--intake">
+              <span class="energy-item__label" data-i18n="todayIntake">今日摄入</span>
+              <span class="energy-item__value"><span id="intakeKcal">0</span></span>
+            </div>
+            <div class="energy-item energy-item--result">
+              <span class="energy-item__label" data-i18n="calorieBalance">热量差</span>
+              <span class="energy-item__value"><span id="netKcal">0</span></span>
+            </div>
           </div>
-          <button class="text-btn" id="addExerciseBtn" data-i18n="addExercise">添加运动</button>
         </div>
 
         <!-- Health Tracking Quick Actions -->
