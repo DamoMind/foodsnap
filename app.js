@@ -1006,8 +1006,39 @@
   // 待处理任务列表（本地存储）
   function getPendingTasks() {
     try {
-      return JSON.parse(localStorage.getItem('pendingTasks') || '[]');
-    } catch { return []; }
+      const raw = JSON.parse(localStorage.getItem('pendingTasks') || '[]');
+      if (!Array.isArray(raw)) return [];
+      
+      const now = Date.now();
+      const maxAge = 24 * 60 * 60 * 1000; // 24 hours
+      let needsSave = false;
+      
+      const tasks = raw.filter(t => {
+        // 必须有 id 和 status
+        if (!t || !t.id || !t.status) {
+          needsSave = true;
+          return false;
+        }
+        // 超时的 pending/processing 任务标记为失败
+        if ((t.status === 'pending' || t.status === 'processing') && 
+            t.createdAt && (now - t.createdAt > maxAge)) {
+          t.status = 'failed';
+          t.error = '处理超时';
+          needsSave = true;
+        }
+        return true;
+      });
+      
+      // 如果有数据被清理或修改，保存回去
+      if (needsSave) {
+        localStorage.setItem('pendingTasks', JSON.stringify(tasks));
+      }
+      
+      return tasks;
+    } catch { 
+      localStorage.removeItem('pendingTasks');
+      return []; 
+    }
   }
 
   function savePendingTasks(tasks) {
@@ -1793,6 +1824,16 @@
       e.stopPropagation();
       renderPendingTasksList();
       setSheetOpen($('#pendingSheet'), true);
+    });
+
+    // Clear all tasks button
+    $('#clearAllTasksBtn')?.addEventListener('click', () => {
+      if (confirm(currentLang === 'zh' ? '确定清除所有任务？' : 'Clear all tasks?')) {
+        localStorage.removeItem('pendingTasks');
+        renderPendingTasksBadge();
+        renderPendingTasksList();
+        showToast(currentLang === 'zh' ? '已清除' : 'Cleared');
+      }
     });
 
     // Initialize pending tasks badge and start polling if needed
