@@ -2228,9 +2228,10 @@
       const sourceLabel = it.manual ? t('manual') : t('recognized');
       const per100Label = t('per100g');
       // Calculate actual nutrition based on weight
-      const actualP = round1((it.per100.protein_g || 0) * it.weight_g / 100);
-      const actualC = round1((it.per100.carbs_g || 0) * it.weight_g / 100);
-      const actualF = round1((it.per100.fat_g || 0) * it.weight_g / 100);
+      // per100 uses short names: p, c, f (not protein_g, carbs_g, fat_g)
+      const actualP = round1((it.per100.p || it.per100.protein_g || 0) * it.weight_g / 100);
+      const actualC = round1((it.per100.c || it.per100.carbs_g || 0) * it.weight_g / 100);
+      const actualF = round1((it.per100.f || it.per100.fat_g || 0) * it.weight_g / 100);
       
       el.innerHTML = `
         <div class="food-item__top">
@@ -2303,9 +2304,9 @@
           const macroP = foodItem.querySelector('.food-item__macro--p');
           const macroC = foodItem.querySelector('.food-item__macro--c');
           const macroF = foodItem.querySelector('.food-item__macro--f');
-          if (macroP) macroP.textContent = `P ${round1((it.per100.protein_g || 0) * it.weight_g / 100)}g`;
-          if (macroC) macroC.textContent = `C ${round1((it.per100.carbs_g || 0) * it.weight_g / 100)}g`;
-          if (macroF) macroF.textContent = `F ${round1((it.per100.fat_g || 0) * it.weight_g / 100)}g`;
+          if (macroP) macroP.textContent = `P ${round1((it.per100.p || it.per100.protein_g || 0) * it.weight_g / 100)}g`;
+          if (macroC) macroC.textContent = `C ${round1((it.per100.c || it.per100.carbs_g || 0) * it.weight_g / 100)}g`;
+          if (macroF) macroF.textContent = `F ${round1((it.per100.f || it.per100.fat_g || 0) * it.weight_g / 100)}g`;
         }
         // Update meal summary
         meal.summary = sumMealItems(meal.items);
