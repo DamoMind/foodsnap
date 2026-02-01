@@ -738,6 +738,30 @@ app.delete('/api/meals/:id', async (c) => {
   return c.json({ success: true });
 });
 
+// Update meal
+app.put('/api/meals/:id', async (c) => {
+  const userId = c.get('userId');
+  const mealId = c.req.param('id');
+  const body = await c.req.json();
+
+  const mealType = body.meal_type;
+  const eatenAt = body.eaten_at || isoNow();
+  const items = JSON.stringify(body.items || []);
+  const totals = JSON.stringify(body.totals || {});
+  const now = isoNow();
+
+  const result = await c.env.DB.prepare(`
+    UPDATE meals SET meal_type = ?, eaten_at = ?, items = ?, totals = ?, updated_at = ?
+    WHERE id = ? AND user_id = ?
+  `).bind(mealType, eatenAt, items, totals, now, mealId, userId).run();
+
+  if (result.meta.changes === 0) {
+    return c.json({ error: 'Meal not found' }, 404);
+  }
+
+  return c.json({ success: true, id: mealId });
+});
+
 // ============== Activity API ==============
 
 app.post('/api/activity', async (c) => {

@@ -1923,6 +1923,14 @@
             showToast(currentLang === 'zh' ? '已保存为新记录' : 'Saved as new record');
           }
 
+          // 同步到云端（如果有 cloudId 则更新，否则新增）
+          const mealToSync = arr[idx >= 0 ? idx : 0];
+          if (mealToSync.cloudId && isLoggedIn()) {
+            updateMealOnBackend(mealToSync).catch(err => console.warn('Update sync failed:', err));
+          } else {
+            syncMealToBackend(mealToSync).catch(err => console.warn('Sync failed:', err));
+          }
+
           State.editingMealId = null;
           State.pendingMeal = null;
           setSheetOpen($('#resultSheet'), false);
@@ -3008,6 +3016,47 @@
       console.warn('Backend meal sync failed (offline?):', err);
       // 标记为待同步，下次有网时重试
       markMealForSync(meal);
+      return null;
+    }
+  }
+
+  // 更新已有餐点到云端
+  async function updateMealOnBackend(meal) {
+    if (!meal.cloudId) return syncMealToBackend(meal);
+    
+    try {
+      const res = await fetch(`${API_BASE}/api/meals/${meal.cloudId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders()
+        },
+        body: JSON.stringify({
+          meal_type: meal.mealType,
+          eaten_at: new Date(meal.createdAt).toISOString(),
+          items: meal.items.map(item => ({
+            name: item.name,
+            weight_g: item.weight_g || 100,
+            confidence: item.confidence || 0.8,
+            kcal: item.kcal || 0,
+            protein_g: item.protein_g || item.p || 0,
+            carbs_g: item.carbs_g || item.c || 0,
+            fat_g: item.fat_g || item.f || 0,
+            per100: item.per100
+          })),
+          totals: {
+            kcal: meal.summary?.kcal || 0,
+            protein_g: meal.summary?.p || 0,
+            carbs_g: meal.summary?.c || 0,
+            fat_g: meal.summary?.f || 0
+          }
+        })
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      console.log('Meal updated on backend');
+      return await res.json();
+    } catch (err) {
+      console.warn('Backend meal update failed:', err);
       return null;
     }
   }
