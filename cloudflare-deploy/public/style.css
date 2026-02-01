@@ -1237,3 +1237,21 @@ button, input, select{font:inherit}
 .analyze-btns .btn{flex:1}
 .btn--outline{background:transparent;border:2px solid var(--accent);color:var(--accent)}
 .btn--outline:hover{background:var(--accent);color:#fff}
+
+/* Task list improvements */
+.task-actions{display:flex;gap:6px;flex-shrink:0}
+.task-error{font-size:11px;color:var(--danger);margin-top:2px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.small-btn.primary{background:var(--accent);color:#fff}
+.pending-task.processing{border-left:3px solid var(--accent)}
+.pending-task.completed{border-left:3px solid var(--success)}
+.pending-task.failed{border-left:3px solid var(--danger)}
+
+/* Submit Success Modal */
+#submitSuccessModal{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center}
+.success-modal__backdrop{position:absolute;inset:0;background:rgba(0,0,0,0.5)}
+.success-modal__content{position:relative;background:var(--card);border-radius:16px;padding:32px 24px;text-align:center;max-width:300px;width:90%;animation:popIn 0.3s ease}
+.success-modal__icon{font-size:48px;margin-bottom:12px}
+.success-modal__title{font-size:20px;font-weight:700;margin-bottom:4px}
+.success-modal__subtitle{color:var(--muted);margin-bottom:20px}
+.success-modal__actions{display:flex;flex-direction:column;gap:8px}
+@keyframes popIn{from{opacity:0;transform:scale(0.9)}to{opacity:1;transform:scale(1)}}

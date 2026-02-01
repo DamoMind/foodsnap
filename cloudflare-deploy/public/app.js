@@ -1136,6 +1136,13 @@
       }[task.status] || task.status;
 
       const time = new Date(task.createdAt).toLocaleTimeString();
+      
+      let actionBtns = '';
+      if (task.status === 'completed') {
+        actionBtns = `<button class="small-btn primary" data-view-task="${task.id}">${t('view') || '查看'}</button>`;
+      } else if (task.status === 'failed') {
+        actionBtns = `<button class="small-btn" data-retry-task="${task.id}">🔄 重试</button>`;
+      }
 
       return `
         <div class="pending-task ${task.status}" data-task-id="${task.id}">
@@ -1143,9 +1150,12 @@
           <div class="task-info">
             <div class="task-status">${statusText}</div>
             <div class="task-time">${time}</div>
+            ${task.error ? `<div class="task-error">${task.error}</div>` : ''}
           </div>
-          ${task.status === 'completed' ? `<button class="small-btn" data-view-task="${task.id}">${t('view') || '查看'}</button>` : ''}
-          <button class="small-btn danger" data-remove-task="${task.id}">×</button>
+          <div class="task-actions">
+            ${actionBtns}
+            <button class="small-btn danger" data-remove-task="${task.id}">×</button>
+          </div>
         </div>
       `;
     }).join('');
@@ -1162,12 +1172,55 @@
         return;
       }
 
+      const retryBtn = e.target.closest('[data-retry-task]');
+      if (retryBtn) {
+        const taskId = retryBtn.dataset.retryTask;
+        await retryFailedTask(taskId);
+        return;
+      }
+
       const removeBtn = e.target.closest('[data-remove-task]');
       if (removeBtn) {
         removePendingTask(removeBtn.dataset.removeTask);
         renderPendingTasksList();
       }
     };
+  }
+
+  // 重试失败的任务
+  async function retryFailedTask(taskId) {
+    const tasks = getPendingTasks();
+    const task = tasks.find(t => t.id === taskId);
+    if (!task || !task.thumbnail) {
+      showToast('无法重试，图片数据丢失');
+      return;
+    }
+
+    try {
+      // 将 thumbnail (dataUrl) 转换为 blob
+      const resp = await fetch(task.thumbnail);
+      const blob = await resp.blob();
+
+      // 重新提交
+      const res = await submitAsyncAnalyze({ dataUrl: task.thumbnail, blob });
+      
+      if (res.success && res.task_id) {
+        // 更新任务 ID 和状态
+        task.id = res.task_id;
+        task.status = 'pending';
+        task.error = null;
+        task.result = null;
+        task.createdAt = Date.now();
+        savePendingTasks(tasks);
+        
+        renderPendingTasksBadge();
+        renderPendingTasksList();
+        showToast('已重新提交');
+        startPolling();
+      }
+    } catch (err) {
+      showToast('重试失败: ' + err.message);
+    }
   }
 
   // 打开已完成任务的结果
@@ -2523,13 +2576,11 @@
           createdAt: Date.now()
         });
 
-        // 显示提示
-        showToast(t('taskSubmitted') || '已提交，稍后在"待处理"中查看');
+        // 显示成功提示，带继续拍照选项
+        showSubmitSuccess();
         
-        // 关闭拍照界面，回到首页
-        setSheetOpen($('#captureSheet'), false);
+        // 重置预览区域，但保持拍照界面打开
         resetCaptureUI();
-        renderIndex();
 
         // 开始轮询
         startPolling();
@@ -2540,6 +2591,50 @@
       alert('提交失败: ' + err.message);
       console.error(err);
     }
+  }
+
+  // 提交成功后的提示（带继续拍照选项）
+  function showSubmitSuccess() {
+    const existingModal = document.getElementById('submitSuccessModal');
+    if (existingModal) existingModal.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'submitSuccessModal';
+    modal.innerHTML = `
+      <div class="success-modal__backdrop"></div>
+      <div class="success-modal__content">
+        <div class="success-modal__icon">✅</div>
+        <div class="success-modal__title">${currentLang === 'zh' ? '已提交处理' : 'Submitted!'}</div>
+        <div class="success-modal__subtitle">${currentLang === 'zh' ? '稍后可在待处理中查看结果' : 'Check results in pending tasks'}</div>
+        <div class="success-modal__actions">
+          <button class="btn btn--primary" id="continuePhotoBtn">📷 ${currentLang === 'zh' ? '继续拍照' : 'Take Another'}</button>
+          <button class="btn btn--ghost" id="backHomeBtn">${currentLang === 'zh' ? '返回首页' : 'Back Home'}</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    // 绑定事件
+    modal.querySelector('#continuePhotoBtn').onclick = () => {
+      modal.remove();
+      // 保持在拍照界面，触发拍照
+      $('#cameraInput')?.click();
+    };
+    modal.querySelector('#backHomeBtn').onclick = () => {
+      modal.remove();
+      setSheetOpen($('#captureSheet'), false);
+      renderIndex();
+    };
+    modal.querySelector('.success-modal__backdrop').onclick = () => {
+      modal.remove();
+    };
+
+    // 3秒后自动关闭（如果用户没操作）
+    setTimeout(() => {
+      if (document.getElementById('submitSuccessModal')) {
+        modal.remove();
+      }
+    }, 5000);
   }
 
   // Toast 提示
