@@ -1848,7 +1848,11 @@
     $('#clearAllTasksBtn')?.addEventListener('click', () => {
       if (confirm(currentLang === 'zh' ? '确定清除所有任务？' : 'Clear all tasks?')) {
         localStorage.removeItem('pendingTasks');
-        renderPendingTasksBadge();
+        // 强制隐藏横幅
+        const banner = $('#pendingBanner');
+        const badge = $('#pendingBadge');
+        if (banner) banner.hidden = true;
+        if (badge) badge.hidden = true;
         renderPendingTasksList();
         showToast(currentLang === 'zh' ? '已清除' : 'Cleared');
       }
