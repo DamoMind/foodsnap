@@ -1379,177 +1379,126 @@ ${supplementCompliance.length > 0 ? supplementCompliance.map(s => `- ${s.name}: 
 
 // ============== Async Analyze API ==============
 
-// Helper: process analyze task in background
-async function processAnalyzeTask(env: Env, taskId: string, imageBase64: string, mimeType: string, lang: string) {
+// Prompts for different task types
+const PROMPTS = {
+  food: (langHint: string) => `你是食物识别专家。${langHint}
+识别图中所有食物，估算重量，提供每100g营养数据。
+返回JSON: {"foods":[{"name":"名称","weight_g":重量,"confidence":0-1,"nutrition_per_100g":{"kcal":热量,"protein_g":蛋白质,"carbs_g":碳水,"fat_g":脂肪}}],"meal_type":"breakfast/lunch/dinner/snack"}`,
+
+  exercise: (langHint: string) => `你是运动数据识别专家。${langHint}
+识别截图中的运动数据（Apple Watch/Strava/Keep等）。Activity Rings的Move值优先。
+返回JSON: {"exercise_kcal":消耗卡路里,"steps":步数,"active_minutes":运动分钟,"summary":"一句话总结"}`
+};
+
+// Unified async task processor
+async function processAnalyzeTask(env: Env, taskId: string, imageBase64: string, mimeType: string, lang: string, taskType: string) {
   const AI_GATEWAY_URL = env.AI_GATEWAY_URL || 'https://edge-ai-gateway.duizhan.app';
   const AI_GATEWAY_KEY = env.AI_GATEWAY_KEY;
 
   try {
-    // Update status to processing
-    await env.DB.prepare('UPDATE analyze_tasks SET status = ? WHERE id = ?')
-      .bind('processing', taskId).run();
+    await env.DB.prepare('UPDATE analyze_tasks SET status = ? WHERE id = ?').bind('processing', taskId).run();
 
-    const langInstructions: Record<string, string> = {
-      zh: '所有食物名称必须使用中文（简体）。即使包装上是日文或英文，也要翻译成中文。',
-      en: 'All food names MUST be in English. Translate any Japanese or Chinese names.',
-      ja: 'すべての食品名は日本語で記載してください。'
-    };
-    const langHint = langInstructions[lang] || langInstructions.zh;
-
-    const prompt = `你是一个专业的食物识别和营养分析助手。
-
-**语言要求**: ${langHint}
-
-**识别要求**:
-1. 仔细识别图片中**所有可见的食物**
-2. 估算每种食物的重量
-3. 提供每100g的营养数据
-
-返回严格JSON格式:
-{
-  "foods": [
-    {
-      "name": "食物名称",
-      "weight_g": 估算重量(数字),
-      "confidence": 置信度0-1,
-      "nutrition_per_100g": {
-        "kcal": 热量,
-        "protein_g": 蛋白质,
-        "carbs_g": 碳水,
-        "fat_g": 脂肪
-      }
-    }
-  ],
-  "meal_type": "breakfast/lunch/dinner/snack",
-  "overall_confidence": 整体置信度0-1
-}
-
-只返回JSON，不要markdown代码块。`;
+    const langHint = { zh: '用中文。', en: 'In English.', ja: '日本語で。' }[lang] || '用中文。';
+    const prompt = PROMPTS[taskType as keyof typeof PROMPTS]?.(langHint) || PROMPTS.food(langHint);
 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (AI_GATEWAY_KEY) {
-      headers['Authorization'] = `Bearer ${AI_GATEWAY_KEY}`;
-    }
+    if (AI_GATEWAY_KEY) headers['Authorization'] = `Bearer ${AI_GATEWAY_KEY}`;
 
     const response = await fetch(`${AI_GATEWAY_URL}/v1/chat/completions`, {
       method: 'POST',
       headers,
       body: JSON.stringify({
         model: 'gpt-4o',
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'text', text: prompt },
-            { type: 'image_url', image_url: { url: `data:${mimeType};base64,${imageBase64}` } }
-          ]
-        }],
-        max_tokens: 2000
+        messages: [{ role: 'user', content: [
+          { type: 'text', text: prompt },
+          { type: 'image_url', image_url: { url: `data:${mimeType};base64,${imageBase64}` } }
+        ]}],
+        max_tokens: taskType === 'exercise' ? 500 : 2000
       })
     });
 
-    if (!response.ok) {
-      throw new Error(`AI service error: ${response.status}`);
-    }
+    if (!response.ok) throw new Error(`AI error: ${response.status}`);
 
     const aiResult = await response.json() as any;
     const content = aiResult.choices?.[0]?.message?.content || '';
-
+    
     let parsed;
     try {
       const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, content];
       parsed = JSON.parse(jsonMatch[1].trim());
-    } catch (e) {
-      throw new Error('Failed to parse AI response');
+    } catch { throw new Error('Failed to parse response'); }
+
+    // Format result based on type
+    let result: any;
+    if (taskType === 'exercise') {
+      result = {
+        type: 'exercise',
+        exercise_kcal: Math.round(parsed.exercise_kcal || 0),
+        steps: Math.round(parsed.steps || 0),
+        active_minutes: Math.round(parsed.active_minutes || 0),
+        summary: parsed.summary
+      };
+    } else {
+      const items = (parsed.foods || []).map((f: any) => {
+        const w = f.weight_g || 100, n = f.nutrition_per_100g || {};
+        return {
+          name: f.name, weight_g: w, confidence: f.confidence || 0.8,
+          kcal: Math.round((n.kcal || 0) * w / 100),
+          protein_g: Math.round((n.protein_g || 0) * w / 100 * 10) / 10,
+          carbs_g: Math.round((n.carbs_g || 0) * w / 100 * 10) / 10,
+          fat_g: Math.round((n.fat_g || 0) * w / 100 * 10) / 10,
+        };
+      });
+      const totals = items.reduce((a: any, i: any) => ({
+        kcal: a.kcal + i.kcal, protein_g: a.protein_g + i.protein_g,
+        carbs_g: a.carbs_g + i.carbs_g, fat_g: a.fat_g + i.fat_g
+      }), { kcal: 0, protein_g: 0, carbs_g: 0, fat_g: 0 });
+      result = { type: 'food', meal_preview: { items, totals } };
     }
 
-    const items = (parsed.foods || []).map((food: any) => {
-      const weight = food.weight_g || 100;
-      const n = food.nutrition_per_100g || {};
-      return {
-        name: food.name,
-        weight_g: weight,
-        confidence: food.confidence || 0.8,
-        kcal: Math.round((n.kcal || 0) * weight / 100),
-        protein_g: Math.round((n.protein_g || 0) * weight / 100 * 10) / 10,
-        carbs_g: Math.round((n.carbs_g || 0) * weight / 100 * 10) / 10,
-        fat_g: Math.round((n.fat_g || 0) * weight / 100 * 10) / 10,
-      };
-    });
-
-    const totals = items.reduce((acc: any, item: any) => ({
-      kcal: acc.kcal + item.kcal,
-      protein_g: Math.round((acc.protein_g + item.protein_g) * 10) / 10,
-      carbs_g: Math.round((acc.carbs_g + item.carbs_g) * 10) / 10,
-      fat_g: Math.round((acc.fat_g + item.fat_g) * 10) / 10,
-    }), { kcal: 0, protein_g: 0, carbs_g: 0, fat_g: 0 });
-
-    const result = {
-      ai: { foods: parsed.foods, meal_type: parsed.meal_type || 'unknown', overall_confidence: parsed.overall_confidence || 0.8 },
-      meal_preview: { items, totals }
-    };
-
-    // Update task with result
     await env.DB.prepare('UPDATE analyze_tasks SET status = ?, result = ?, image_data = NULL, completed_at = datetime(\'now\') WHERE id = ?')
       .bind('completed', JSON.stringify(result), taskId).run();
 
   } catch (error: any) {
-    console.error('Async analyze error:', error);
     await env.DB.prepare('UPDATE analyze_tasks SET status = ?, error = ?, completed_at = datetime(\'now\') WHERE id = ?')
       .bind('failed', error.message, taskId).run();
   }
 }
 
-// Submit image for async analysis
+// Unified submit API - supports type=food (default) or type=exercise
 app.post('/api/analyze/submit', async (c) => {
   try {
     const formData = await c.req.formData();
     const imageFile = (formData.get('image') || formData.get('file')) as File | null;
     const lang = (formData.get('lang') as string) || 'zh';
+    const taskType = (formData.get('type') as string) || 'food';
 
-    if (!imageFile) {
-      return c.json({ error: 'No image provided' }, 400);
-    }
+    if (!imageFile) return c.json({ error: 'No image provided' }, 400);
 
-    // Get user ID if authenticated
     const authHeader = c.req.header('Authorization');
     let userId: string | null = null;
     if (authHeader?.startsWith('Bearer ')) {
       userId = await verifyJwt(authHeader.slice(7), c.env);
     }
 
-    // Convert image to base64
     const arrayBuffer = await imageFile.arrayBuffer();
     const uint8Array = new Uint8Array(arrayBuffer);
     let binary = '';
-    const chunkSize = 8192;
-    for (let i = 0; i < uint8Array.length; i += chunkSize) {
-      const chunk = uint8Array.subarray(i, i + chunkSize);
-      binary += String.fromCharCode(...chunk);
+    for (let i = 0; i < uint8Array.length; i += 8192) {
+      binary += String.fromCharCode(...uint8Array.subarray(i, i + 8192));
     }
     const base64Image = btoa(binary);
     const mimeType = imageFile.type || 'image/jpeg';
-
-    // Generate task ID
     const taskId = crypto.randomUUID();
 
-    // Insert task
-    await c.env.DB.prepare(
-      'INSERT INTO analyze_tasks (id, user_id, status, image_data, lang) VALUES (?, ?, ?, ?, ?)'
-    ).bind(taskId, userId, 'pending', base64Image, lang).run();
+    await c.env.DB.prepare('INSERT INTO analyze_tasks (id, user_id, status, image_data, lang) VALUES (?, ?, ?, ?, ?)')
+      .bind(taskId, userId, 'pending', base64Image, lang).run();
 
-    // Process in background using waitUntil
-    c.executionCtx.waitUntil(
-      processAnalyzeTask(c.env, taskId, base64Image, mimeType, lang)
-    );
+    c.executionCtx.waitUntil(processAnalyzeTask(c.env, taskId, base64Image, mimeType, lang, taskType));
 
-    return c.json({ 
-      success: true, 
-      task_id: taskId,
-      message: 'Processing started, check status for results'
-    });
+    return c.json({ success: true, task_id: taskId, type: taskType });
 
   } catch (error: any) {
-    console.error('Submit error:', error);
     return c.json({ error: 'Submit failed', message: error.message }, 500);
   }
 });
@@ -1972,113 +1921,6 @@ app.post('/api/analyze-exercise', async (c) => {
     return c.json({ error: 'Analysis failed', message: error.message }, 500);
   }
 });
-
-// Async exercise recognition
-app.post('/api/analyze-exercise/submit', async (c) => {
-  const AI_GATEWAY_URL = c.env.AI_GATEWAY_URL || 'https://edge-ai-gateway.duizhan.app';
-  const AI_GATEWAY_KEY = c.env.AI_GATEWAY_KEY;
-
-  try {
-    const formData = await c.req.formData();
-    const imageFile = (formData.get('image') || formData.get('file')) as File | null;
-    const lang = (formData.get('lang') as string) || 'zh';
-
-    if (!imageFile) {
-      return c.json({ error: 'No image provided' }, 400);
-    }
-
-    const authHeader = c.req.header('Authorization');
-    let userId: string | null = null;
-    if (authHeader?.startsWith('Bearer ')) {
-      userId = await verifyJwt(authHeader.slice(7), c.env);
-    }
-
-    const arrayBuffer = await imageFile.arrayBuffer();
-    const uint8Array = new Uint8Array(arrayBuffer);
-    let binary = '';
-    const chunkSize = 8192;
-    for (let i = 0; i < uint8Array.length; i += chunkSize) {
-      const chunk = uint8Array.subarray(i, i + chunkSize);
-      binary += String.fromCharCode(...chunk);
-    }
-    const base64Image = btoa(binary);
-    const mimeType = imageFile.type || 'image/jpeg';
-    const taskId = crypto.randomUUID();
-
-    // Insert task with type='exercise'
-    await c.env.DB.prepare(
-      'INSERT INTO analyze_tasks (id, user_id, status, image_data, lang) VALUES (?, ?, ?, ?, ?)'
-    ).bind(taskId, userId, 'pending', `exercise:${base64Image}`, lang).run();
-
-    // Process in background
-    c.executionCtx.waitUntil(processExerciseTask(c.env, taskId, base64Image, mimeType, lang));
-
-    return c.json({ success: true, task_id: taskId, type: 'exercise' });
-
-  } catch (error: any) {
-    return c.json({ error: 'Submit failed', message: error.message }, 500);
-  }
-});
-
-async function processExerciseTask(env: Env, taskId: string, base64Image: string, mimeType: string, lang: string) {
-  const AI_GATEWAY_URL = env.AI_GATEWAY_URL || 'https://edge-ai-gateway.duizhan.app';
-  const AI_GATEWAY_KEY = env.AI_GATEWAY_KEY;
-
-  try {
-    await env.DB.prepare('UPDATE analyze_tasks SET status = ? WHERE id = ?').bind('processing', taskId).run();
-
-    const prompt = `你是运动数据识别专家。分析截图中的运动数据。
-识别：运动消耗卡路里（Activity Rings的Move值优先）、步数、运动分钟数。
-返回JSON: {"exercise_kcal":数字,"steps":数字,"active_minutes":数字,"summary":"一句话总结"}`;
-
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (AI_GATEWAY_KEY) headers['Authorization'] = `Bearer ${AI_GATEWAY_KEY}`;
-
-    const response = await fetch(`${AI_GATEWAY_URL}/v1/chat/completions`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        model: 'gpt-4o',
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'text', text: prompt },
-            { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64Image}` } }
-          ]
-        }],
-        max_tokens: 500
-      })
-    });
-
-    if (!response.ok) throw new Error('AI service error');
-
-    const aiResult = await response.json() as any;
-    const content = aiResult.choices?.[0]?.message?.content || '';
-    
-    let parsed;
-    try {
-      const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, content];
-      parsed = JSON.parse(jsonMatch[1].trim());
-    } catch {
-      throw new Error('Failed to parse response');
-    }
-
-    const result = {
-      type: 'exercise',
-      exercise_kcal: Math.round(parsed.exercise_kcal || 0),
-      steps: Math.round(parsed.steps || 0),
-      active_minutes: Math.round(parsed.active_minutes || 0),
-      summary: parsed.summary || null
-    };
-
-    await env.DB.prepare('UPDATE analyze_tasks SET status = ?, result = ?, image_data = NULL, completed_at = datetime(\'now\') WHERE id = ?')
-      .bind('completed', JSON.stringify(result), taskId).run();
-
-  } catch (error: any) {
-    await env.DB.prepare('UPDATE analyze_tasks SET status = ?, error = ?, completed_at = datetime(\'now\') WHERE id = ?')
-      .bind('failed', error.message, taskId).run();
-  }
-}
 
 // Serve static files
 app.get('/*', serveStatic({ root: './' }));

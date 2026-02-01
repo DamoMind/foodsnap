@@ -965,7 +965,9 @@
   // ====== 异步分析 API ======
   
   // 提交图片进行异步分析
-  async function submitAsyncAnalyze({ dataUrl, blob }) {
+  // 统一的异步图片识别提交函数
+  // type: 'food' (默认) 或 'exercise'
+  async function submitAsyncAnalyze({ dataUrl, blob, type = 'food' }) {
     let imageBlob = blob;
     if (!imageBlob && dataUrl) {
       const resp = await fetch(dataUrl);
@@ -973,14 +975,13 @@
     }
 
     const formData = new FormData();
-    formData.append('file', imageBlob, 'food.jpg');
+    formData.append('file', imageBlob, type === 'exercise' ? 'exercise.jpg' : 'food.jpg');
+    formData.append('lang', currentLang || 'zh');
+    formData.append('type', type);
 
     const response = await fetch('/api/analyze/submit', {
       method: 'POST',
-      headers: {
-        ...getAuthHeaders(),
-        'X-Lang': currentLang || 'zh'
-      },
+      headers: getAuthHeaders(),
       body: formData
     });
 
@@ -2039,25 +2040,14 @@
         const compressed = await compressImage(file, 1280, 0.8);
         const thumbnail = compressed.dataUrl;
         
-        const formData = new FormData();
-        formData.append('file', compressed.blob, 'exercise.jpg');
-        formData.append('lang', currentLang || 'zh');
-
-        // Submit async
-        const response = await fetch('/api/analyze-exercise/submit', {
-          method: 'POST',
-          headers: getAuthHeaders(),
-          body: formData
+        // 使用统一的异步提交函数
+        const res = await submitAsyncAnalyze({ 
+          dataUrl: thumbnail, 
+          blob: compressed.blob, 
+          type: 'exercise' 
         });
-
-        if (!response.ok) {
-          throw new Error('Submit failed');
-        }
-
-        const res = await response.json();
         
         if (res.success && res.task_id) {
-          // Add to pending tasks with type='exercise'
           addPendingTask({
             id: res.task_id,
             type: 'exercise',
@@ -2066,7 +2056,7 @@
             createdAt: Date.now()
           });
 
-          showToast(currentLang === 'zh' ? '✅ 已提交，稍后查看结果' : 'Submitted! Check pending tasks.', 2000, 'success');
+          showToast(currentLang === 'zh' ? '✅ 已提交，稍后查看结果' : 'Submitted!', 2000, 'success');
           startPolling();
         }
 
