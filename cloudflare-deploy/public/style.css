@@ -1208,16 +1208,14 @@ button, input, select{font:inherit}
   margin-bottom: 16px;
 }
 
-/* Pending Tasks */
-.pending-tasks-list{display:flex;flex-direction:column;gap:8px}
-.pending-task{display:flex;align-items:center;gap:12px;padding:12px;background:var(--card);border-radius:8px;border:1px solid var(--border)}
-.pending-task.completed{border-color:var(--success)}
-.pending-task.failed{border-color:var(--danger)}
-.task-thumb{width:48px;height:48px;object-fit:cover;border-radius:6px}
+/* Pending Tasks - Simplified */
+.pending-tasks-list{display:flex;flex-direction:column;gap:10px}
+.pending-task{display:flex;align-items:center;gap:12px;padding:12px;background:var(--bg);border-radius:10px}
+.task-thumb{width:50px;height:50px;object-fit:cover;border-radius:8px;flex-shrink:0}
 .task-info{flex:1;min-width:0}
-.task-status{font-weight:600}
+.task-status{font-weight:600;font-size:14px}
 .task-time{font-size:12px;color:var(--muted)}
-.empty-state{text-align:center;padding:24px;color:var(--muted)}
+.empty-state{text-align:center;padding:32px;color:var(--muted)}
 
 
 /* Pending Banner */
@@ -1240,11 +1238,8 @@ button, input, select{font:inherit}
 
 /* Task list improvements */
 .task-actions{display:flex;gap:6px;flex-shrink:0}
-.task-error{font-size:11px;color:var(--danger);margin-top:2px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.task-error{font-size:11px;color:var(--danger);margin-top:2px}
 .small-btn.primary{background:var(--accent);color:#fff}
-.pending-task.processing{border-left:3px solid var(--accent)}
-.pending-task.completed{border-left:3px solid var(--success)}
-.pending-task.failed{border-left:3px solid var(--danger)}
 
 /* Submit Success Modal */
 #submitSuccessModal{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center}
