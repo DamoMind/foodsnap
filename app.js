@@ -962,6 +962,216 @@
     }
   }
 
+  // ====== 异步分析 API ======
+  
+  // 提交图片进行异步分析
+  async function submitAsyncAnalyze({ dataUrl, blob }) {
+    let imageBlob = blob;
+    if (!imageBlob && dataUrl) {
+      const resp = await fetch(dataUrl);
+      imageBlob = await resp.blob();
+    }
+
+    const formData = new FormData();
+    formData.append('file', imageBlob, 'food.jpg');
+
+    const response = await fetch('/api/analyze/submit', {
+      method: 'POST',
+      headers: {
+        ...getAuthHeaders(),
+        'X-Lang': currentLang || 'zh'
+      },
+      body: formData
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${response.status}`);
+    }
+
+    return await response.json();
+  }
+
+  // 查询任务状态
+  async function checkTaskStatus(taskId) {
+    const response = await fetch(`/api/analyze/status/${taskId}`, {
+      headers: getAuthHeaders()
+    });
+    if (!response.ok) {
+      throw new Error('Failed to check status');
+    }
+    return await response.json();
+  }
+
+  // 待处理任务列表（本地存储）
+  function getPendingTasks() {
+    try {
+      return JSON.parse(localStorage.getItem('pendingTasks') || '[]');
+    } catch { return []; }
+  }
+
+  function savePendingTasks(tasks) {
+    localStorage.setItem('pendingTasks', JSON.stringify(tasks.slice(0, 20)));
+  }
+
+  function addPendingTask(task) {
+    const tasks = getPendingTasks();
+    tasks.unshift(task);
+    savePendingTasks(tasks);
+    renderPendingTasksBadge();
+  }
+
+  function removePendingTask(taskId) {
+    const tasks = getPendingTasks().filter(t => t.id !== taskId);
+    savePendingTasks(tasks);
+    renderPendingTasksBadge();
+  }
+
+  // 显示待处理任务数量徽章
+  function renderPendingTasksBadge() {
+    const tasks = getPendingTasks().filter(t => t.status === 'pending' || t.status === 'processing');
+    const badge = $('#pendingBadge');
+    if (badge) {
+      if (tasks.length > 0) {
+        badge.textContent = tasks.length;
+        badge.hidden = false;
+      } else {
+        badge.hidden = true;
+      }
+    }
+  }
+
+  // 轮询检查待处理任务
+  async function pollPendingTasks() {
+    const tasks = getPendingTasks();
+    let updated = false;
+
+    for (const task of tasks) {
+      if (task.status === 'pending' || task.status === 'processing') {
+        try {
+          const result = await checkTaskStatus(task.id);
+          if (result.status !== task.status) {
+            task.status = result.status;
+            task.result = result.result;
+            task.error = result.error;
+            updated = true;
+          }
+        } catch (err) {
+          console.error('Poll error:', err);
+        }
+      }
+    }
+
+    if (updated) {
+      savePendingTasks(tasks);
+      renderPendingTasksBadge();
+      renderPendingTasksList();
+    }
+  }
+
+  // 渲染待处理任务列表
+  function renderPendingTasksList() {
+    const container = $('#pendingTasksList');
+    if (!container) return;
+
+    const tasks = getPendingTasks();
+    if (tasks.length === 0) {
+      container.innerHTML = `<div class="empty-state">${t('noPendingTasks') || '暂无待处理任务'}</div>`;
+      return;
+    }
+
+    container.innerHTML = tasks.map(task => {
+      const statusText = {
+        pending: '⏳ 排队中',
+        processing: '🔄 识别中',
+        completed: '✅ 完成',
+        failed: '❌ 失败'
+      }[task.status] || task.status;
+
+      const time = new Date(task.createdAt).toLocaleTimeString();
+
+      return `
+        <div class="pending-task ${task.status}" data-task-id="${task.id}">
+          <img src="${task.thumbnail}" class="task-thumb" alt="">
+          <div class="task-info">
+            <div class="task-status">${statusText}</div>
+            <div class="task-time">${time}</div>
+          </div>
+          ${task.status === 'completed' ? `<button class="small-btn" data-view-task="${task.id}">${t('view') || '查看'}</button>` : ''}
+          <button class="small-btn danger" data-remove-task="${task.id}">×</button>
+        </div>
+      `;
+    }).join('');
+
+    // 绑定事件
+    container.onclick = async (e) => {
+      const viewBtn = e.target.closest('[data-view-task]');
+      if (viewBtn) {
+        const taskId = viewBtn.dataset.viewTask;
+        const task = getPendingTasks().find(t => t.id === taskId);
+        if (task?.result) {
+          openTaskResult(task);
+        }
+        return;
+      }
+
+      const removeBtn = e.target.closest('[data-remove-task]');
+      if (removeBtn) {
+        removePendingTask(removeBtn.dataset.removeTask);
+        renderPendingTasksList();
+      }
+    };
+  }
+
+  // 打开已完成任务的结果
+  function openTaskResult(task) {
+    if (!task.result?.meal_preview) return;
+
+    const items = (task.result.meal_preview.items || []).map((it) => {
+      const weight = it.weight_g || 100;
+      const kcal = it.kcal || 0;
+      const protein = it.protein_g || 0;
+      const carbs = it.carbs_g || 0;
+      const fat = it.fat_g || 0;
+      return {
+        id: cryptoRandomId(),
+        foodId: it.name,
+        name: it.name,
+        confidence: it.confidence || 0.85,
+        weight_g: weight,
+        manual: false,
+        kcal: round1(kcal),
+        p: round1(protein),
+        c: round1(carbs),
+        f: round1(fat),
+        per100: {
+          kcal: round1(kcal / weight * 100),
+          p: round1(protein / weight * 100),
+          c: round1(carbs / weight * 100),
+          f: round1(fat / weight * 100)
+        }
+      };
+    });
+
+    State.pendingMeal = {
+      id: cryptoRandomId(),
+      createdAt: Date.now(),
+      mealType: task.mealType || 'lunch',
+      imageDataUrl: task.thumbnail,
+      items
+    };
+    State.pendingMeal.summary = sumMealItems(items);
+    State.editingMealId = null;
+
+    $('#resultImg').src = task.thumbnail;
+    renderResultSheet(State.pendingMeal);
+    setSheetOpen($('#pendingSheet'), false);
+    setSheetOpen($('#resultSheet'), true);
+
+    // 从待处理列表移除
+    removePendingTask(task.id);
+  }
+
   // 本地模拟（API 不可用时的降级方案）
   function fallbackLocalAnalysis() {
     const candidates = [
@@ -1464,6 +1674,22 @@
 
     // analyze
     $('#analyzeBtn').addEventListener('click', onAnalyze);
+    
+    // async analyze (background processing)
+    $('#analyzeAsyncBtn')?.addEventListener('click', onAnalyzeAsync);
+
+    // pending tasks button
+    $('#pendingBtn')?.addEventListener('click', () => {
+      renderPendingTasksList();
+      setSheetOpen($('#pendingSheet'), true);
+    });
+
+    // Initialize pending tasks badge and start polling if needed
+    renderPendingTasksBadge();
+    const activeTasks = getPendingTasks().filter(t => t.status === 'pending' || t.status === 'processing');
+    if (activeTasks.length > 0) {
+      startPolling();
+    }
 
     // result save buttons - use a flag to track edit mode
     // Use saving flag to prevent double-click
@@ -2207,6 +2433,91 @@
       console.error(err);
     } finally {
       $('#loadingBox').hidden = true;
+    }
+  }
+
+  // 异步分析 - 提交后立即返回，后台处理
+  async function onAnalyzeAsync() {
+    if (!State.capture.dataUrl) {
+      alert('请先拍照或选择图片。');
+      return;
+    }
+
+    gtmEvent('analyze_food_async');
+
+    try {
+      // 创建缩略图
+      const thumbnail = State.capture.dataUrl;
+      
+      // 提交异步任务
+      const res = await submitAsyncAnalyze({ 
+        dataUrl: State.capture.dataUrl, 
+        blob: State.capture.blob 
+      });
+
+      if (res.success && res.task_id) {
+        // 添加到待处理列表
+        addPendingTask({
+          id: res.task_id,
+          status: 'pending',
+          thumbnail: thumbnail,
+          mealType: State.capture.mealType,
+          createdAt: Date.now()
+        });
+
+        // 显示提示
+        showToast(t('taskSubmitted') || '已提交，稍后在"待处理"中查看');
+        
+        // 关闭拍照界面，回到首页
+        setSheetOpen($('#captureSheet'), false);
+        resetCaptureUI();
+        renderIndex();
+
+        // 开始轮询
+        startPolling();
+      } else {
+        throw new Error(res.error || 'Submit failed');
+      }
+    } catch (err) {
+      alert('提交失败: ' + err.message);
+      console.error(err);
+    }
+  }
+
+  // Toast 提示
+  function showToast(msg, duration = 2000) {
+    let toast = document.getElementById('toast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'toast';
+      toast.style.cssText = 'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.8);color:#fff;padding:12px 24px;border-radius:8px;z-index:9999;transition:opacity 0.3s;';
+      document.body.appendChild(toast);
+    }
+    toast.textContent = msg;
+    toast.style.opacity = '1';
+    setTimeout(() => { toast.style.opacity = '0'; }, duration);
+  }
+
+  // 轮询控制
+  let pollingInterval = null;
+
+  function startPolling() {
+    if (pollingInterval) return;
+    pollingInterval = setInterval(async () => {
+      const tasks = getPendingTasks();
+      const activeTasks = tasks.filter(t => t.status === 'pending' || t.status === 'processing');
+      if (activeTasks.length === 0) {
+        stopPolling();
+        return;
+      }
+      await pollPendingTasks();
+    }, 3000); // 每3秒检查一次
+  }
+
+  function stopPolling() {
+    if (pollingInterval) {
+      clearInterval(pollingInterval);
+      pollingInterval = null;
     }
   }
 

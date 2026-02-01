@@ -23,6 +23,10 @@
     </div>
     <div class="topbar__actions">
       <button class="lang-btn" id="langToggle" title="Switch Language">EN</button>
+      <button class="icon-btn" id="pendingBtn" aria-label="待处理" style="position:relative;">
+        <span class="icon">⏳</span>
+        <span class="badge-dot" id="pendingBadge" hidden style="position:absolute;top:2px;right:2px;background:#ef4444;color:#fff;font-size:10px;min-width:16px;height:16px;border-radius:8px;display:flex;align-items:center;justify-content:center;"></span>
+      </button>
       <a class="icon-btn" href="./dashboard.html" aria-label="统计">
         <span class="icon">📊</span>
       </a>
@@ -182,6 +186,7 @@
               </select>
             </div>
             <button class="btn btn--primary" id="analyzeBtn" data-i18n="startAnalyze">开始识别</button>
+            <button class="btn btn--ghost" id="analyzeAsyncBtn" title="后台处理，稍后查看结果">⏳ 后台处理</button>
           </div>
         </div>
 
@@ -587,9 +592,28 @@
     </div>
   </div>
 
+  <!-- 待处理任务列表 -->
+  <div class="sheet" id="pendingSheet" aria-hidden="true">
+    <div class="sheet__backdrop" data-close="1"></div>
+    <div class="sheet__body" role="dialog">
+      <div class="sheet__header">
+        <h2 data-i18n="pendingTasks">待处理任务</h2>
+        <button class="close-x" data-close="1">&times;</button>
+      </div>
+      <div class="sheet__content">
+        <div id="pendingTasksList" class="pending-tasks-list">
+          <div class="empty-state">暂无待处理任务</div>
+        </div>
+      </div>
+      <div class="sheet__footer">
+        <button class="btn btn--ghost" data-close="1" data-i18n="close">关闭</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Google Sign-In SDK -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 
-  <script src="./app.js?v=1769734301"></script>
+  <script src="./app.js?v=1769734302"></script>
 </body>
 </html>

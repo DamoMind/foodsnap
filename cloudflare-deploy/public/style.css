@@ -1207,3 +1207,15 @@ button, input, select{font:inherit}
   color: var(--text-muted);
   margin-bottom: 16px;
 }
+
+/* Pending Tasks */
+.pending-tasks-list{display:flex;flex-direction:column;gap:8px}
+.pending-task{display:flex;align-items:center;gap:12px;padding:12px;background:var(--card);border-radius:8px;border:1px solid var(--border)}
+.pending-task.completed{border-color:var(--success)}
+.pending-task.failed{border-color:var(--danger)}
+.task-thumb{width:48px;height:48px;object-fit:cover;border-radius:6px}
+.task-info{flex:1;min-width:0}
+.task-status{font-weight:600}
+.task-time{font-size:12px;color:var(--muted)}
+.empty-state{text-align:center;padding:24px;color:var(--muted)}
+

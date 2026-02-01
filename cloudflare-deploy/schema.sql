@@ -98,3 +98,18 @@ CREATE TABLE IF NOT EXISTS supplement_logs (
     FOREIGN KEY (supplement_id) REFERENCES supplements(id)
 );
 CREATE INDEX IF NOT EXISTS idx_supplement_logs_user_date ON supplement_logs(user_id, taken_at);
+
+-- Async analyze tasks table
+CREATE TABLE IF NOT EXISTS analyze_tasks (
+    id TEXT PRIMARY KEY,
+    user_id TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',  -- pending, processing, completed, failed
+    image_data TEXT,              -- base64 (for small images) or R2 path
+    lang TEXT DEFAULT 'zh',
+    result TEXT,                  -- JSON result
+    error TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    completed_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_analyze_tasks_user ON analyze_tasks(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_analyze_tasks_status ON analyze_tasks(status, created_at);

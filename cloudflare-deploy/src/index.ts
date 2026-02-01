@@ -1377,7 +1377,242 @@ ${supplementCompliance.length > 0 ? supplementCompliance.map(s => `- ${s.name}: 
   }
 });
 
-// ============== AI Analyze API ==============
+// ============== Async Analyze API ==============
+
+// Helper: process analyze task in background
+async function processAnalyzeTask(env: Env, taskId: string, imageBase64: string, mimeType: string, lang: string) {
+  const AI_GATEWAY_URL = env.AI_GATEWAY_URL || 'https://edge-ai-gateway.duizhan.app';
+  const AI_GATEWAY_KEY = env.AI_GATEWAY_KEY;
+
+  try {
+    // Update status to processing
+    await env.DB.prepare('UPDATE analyze_tasks SET status = ? WHERE id = ?')
+      .bind('processing', taskId).run();
+
+    const langInstructions: Record<string, string> = {
+      zh: '所有食物名称必须使用中文（简体）。即使包装上是日文或英文，也要翻译成中文。',
+      en: 'All food names MUST be in English. Translate any Japanese or Chinese names.',
+      ja: 'すべての食品名は日本語で記載してください。'
+    };
+    const langHint = langInstructions[lang] || langInstructions.zh;
+
+    const prompt = `你是一个专业的食物识别和营养分析助手。
+
+**语言要求**: ${langHint}
+
+**识别要求**:
+1. 仔细识别图片中**所有可见的食物**
+2. 估算每种食物的重量
+3. 提供每100g的营养数据
+
+返回严格JSON格式:
+{
+  "foods": [
+    {
+      "name": "食物名称",
+      "weight_g": 估算重量(数字),
+      "confidence": 置信度0-1,
+      "nutrition_per_100g": {
+        "kcal": 热量,
+        "protein_g": 蛋白质,
+        "carbs_g": 碳水,
+        "fat_g": 脂肪
+      }
+    }
+  ],
+  "meal_type": "breakfast/lunch/dinner/snack",
+  "overall_confidence": 整体置信度0-1
+}
+
+只返回JSON，不要markdown代码块。`;
+
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (AI_GATEWAY_KEY) {
+      headers['Authorization'] = `Bearer ${AI_GATEWAY_KEY}`;
+    }
+
+    const response = await fetch(`${AI_GATEWAY_URL}/v1/chat/completions`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'text', text: prompt },
+            { type: 'image_url', image_url: { url: `data:${mimeType};base64,${imageBase64}` } }
+          ]
+        }],
+        max_tokens: 2000
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`AI service error: ${response.status}`);
+    }
+
+    const aiResult = await response.json() as any;
+    const content = aiResult.choices?.[0]?.message?.content || '';
+
+    let parsed;
+    try {
+      const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, content];
+      parsed = JSON.parse(jsonMatch[1].trim());
+    } catch (e) {
+      throw new Error('Failed to parse AI response');
+    }
+
+    const items = (parsed.foods || []).map((food: any) => {
+      const weight = food.weight_g || 100;
+      const n = food.nutrition_per_100g || {};
+      return {
+        name: food.name,
+        weight_g: weight,
+        confidence: food.confidence || 0.8,
+        kcal: Math.round((n.kcal || 0) * weight / 100),
+        protein_g: Math.round((n.protein_g || 0) * weight / 100 * 10) / 10,
+        carbs_g: Math.round((n.carbs_g || 0) * weight / 100 * 10) / 10,
+        fat_g: Math.round((n.fat_g || 0) * weight / 100 * 10) / 10,
+      };
+    });
+
+    const totals = items.reduce((acc: any, item: any) => ({
+      kcal: acc.kcal + item.kcal,
+      protein_g: Math.round((acc.protein_g + item.protein_g) * 10) / 10,
+      carbs_g: Math.round((acc.carbs_g + item.carbs_g) * 10) / 10,
+      fat_g: Math.round((acc.fat_g + item.fat_g) * 10) / 10,
+    }), { kcal: 0, protein_g: 0, carbs_g: 0, fat_g: 0 });
+
+    const result = {
+      ai: { foods: parsed.foods, meal_type: parsed.meal_type || 'unknown', overall_confidence: parsed.overall_confidence || 0.8 },
+      meal_preview: { items, totals }
+    };
+
+    // Update task with result
+    await env.DB.prepare('UPDATE analyze_tasks SET status = ?, result = ?, image_data = NULL, completed_at = datetime(\'now\') WHERE id = ?')
+      .bind('completed', JSON.stringify(result), taskId).run();
+
+  } catch (error: any) {
+    console.error('Async analyze error:', error);
+    await env.DB.prepare('UPDATE analyze_tasks SET status = ?, error = ?, completed_at = datetime(\'now\') WHERE id = ?')
+      .bind('failed', error.message, taskId).run();
+  }
+}
+
+// Submit image for async analysis
+app.post('/api/analyze/submit', async (c) => {
+  try {
+    const formData = await c.req.formData();
+    const imageFile = (formData.get('image') || formData.get('file')) as File | null;
+    const lang = (formData.get('lang') as string) || 'zh';
+
+    if (!imageFile) {
+      return c.json({ error: 'No image provided' }, 400);
+    }
+
+    // Get user ID if authenticated
+    const authHeader = c.req.header('Authorization');
+    let userId: string | null = null;
+    if (authHeader?.startsWith('Bearer ')) {
+      userId = await verifyJwt(authHeader.slice(7), c.env);
+    }
+
+    // Convert image to base64
+    const arrayBuffer = await imageFile.arrayBuffer();
+    const uint8Array = new Uint8Array(arrayBuffer);
+    let binary = '';
+    const chunkSize = 8192;
+    for (let i = 0; i < uint8Array.length; i += chunkSize) {
+      const chunk = uint8Array.subarray(i, i + chunkSize);
+      binary += String.fromCharCode(...chunk);
+    }
+    const base64Image = btoa(binary);
+    const mimeType = imageFile.type || 'image/jpeg';
+
+    // Generate task ID
+    const taskId = crypto.randomUUID();
+
+    // Insert task
+    await c.env.DB.prepare(
+      'INSERT INTO analyze_tasks (id, user_id, status, image_data, lang) VALUES (?, ?, ?, ?, ?)'
+    ).bind(taskId, userId, 'pending', base64Image, lang).run();
+
+    // Process in background using waitUntil
+    c.executionCtx.waitUntil(
+      processAnalyzeTask(c.env, taskId, base64Image, mimeType, lang)
+    );
+
+    return c.json({ 
+      success: true, 
+      task_id: taskId,
+      message: 'Processing started, check status for results'
+    });
+
+  } catch (error: any) {
+    console.error('Submit error:', error);
+    return c.json({ error: 'Submit failed', message: error.message }, 500);
+  }
+});
+
+// Check task status
+app.get('/api/analyze/status/:id', async (c) => {
+  const taskId = c.req.param('id');
+
+  try {
+    const task = await c.env.DB.prepare(
+      'SELECT id, status, result, error, created_at, completed_at FROM analyze_tasks WHERE id = ?'
+    ).bind(taskId).first() as any;
+
+    if (!task) {
+      return c.json({ error: 'Task not found' }, 404);
+    }
+
+    const response: any = {
+      task_id: task.id,
+      status: task.status,
+      created_at: task.created_at,
+    };
+
+    if (task.status === 'completed' && task.result) {
+      response.result = JSON.parse(task.result);
+      response.completed_at = task.completed_at;
+    } else if (task.status === 'failed') {
+      response.error = task.error;
+      response.completed_at = task.completed_at;
+    }
+
+    return c.json(response);
+
+  } catch (error: any) {
+    return c.json({ error: 'Failed to get status', message: error.message }, 500);
+  }
+});
+
+// Get pending tasks for user
+app.get('/api/analyze/pending', async (c) => {
+  const authHeader = c.req.header('Authorization');
+  let userId: string | null = null;
+  if (authHeader?.startsWith('Bearer ')) {
+    userId = await verifyJwt(authHeader.slice(7), c.env);
+  }
+
+  if (!userId) {
+    return c.json({ error: 'Authentication required' }, 401);
+  }
+
+  try {
+    const tasks = await c.env.DB.prepare(
+      'SELECT id, status, created_at, completed_at FROM analyze_tasks WHERE user_id = ? AND status IN (?, ?) ORDER BY created_at DESC LIMIT 20'
+    ).bind(userId, 'pending', 'processing').all();
+
+    return c.json({ tasks: tasks.results });
+
+  } catch (error: any) {
+    return c.json({ error: 'Failed to get tasks', message: error.message }, 500);
+  }
+});
+
+// ============== AI Analyze API (Sync - kept for backward compatibility) ==============
 
 app.post('/api/analyze', async (c) => {
   const AI_GATEWAY_URL = c.env.AI_GATEWAY_URL || 'https://edge-ai-gateway.duizhan.app';
