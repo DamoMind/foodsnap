@@ -1029,14 +1029,40 @@
 
   // 显示待处理任务数量徽章
   function renderPendingTasksBadge() {
-    const tasks = getPendingTasks().filter(t => t.status === 'pending' || t.status === 'processing');
+    const tasks = getPendingTasks();
+    const activeTasks = tasks.filter(t => t.status === 'pending' || t.status === 'processing');
+    const completedTasks = tasks.filter(t => t.status === 'completed');
+    
+    // 更新顶栏徽章
     const badge = $('#pendingBadge');
     if (badge) {
-      if (tasks.length > 0) {
-        badge.textContent = tasks.length;
+      const total = activeTasks.length + completedTasks.length;
+      if (total > 0) {
+        badge.textContent = total;
         badge.hidden = false;
       } else {
         badge.hidden = true;
+      }
+    }
+
+    // 更新首页横幅
+    const banner = $('#pendingBanner');
+    const bannerText = $('#pendingBannerText');
+    if (banner && bannerText) {
+      if (activeTasks.length > 0) {
+        banner.hidden = false;
+        const text = currentLang === 'zh' 
+          ? `有 ${activeTasks.length} 张照片正在识别中...`
+          : `${activeTasks.length} photo(s) processing...`;
+        bannerText.textContent = text;
+      } else if (completedTasks.length > 0) {
+        banner.hidden = false;
+        const text = currentLang === 'zh'
+          ? `${completedTasks.length} 张照片已识别完成，点击查看`
+          : `${completedTasks.length} photo(s) ready to view`;
+        bannerText.textContent = text;
+      } else {
+        banner.hidden = true;
       }
     }
   }
@@ -1045,16 +1071,23 @@
   async function pollPendingTasks() {
     const tasks = getPendingTasks();
     let updated = false;
+    let newlyCompleted = 0;
+    let newlyFailed = 0;
 
     for (const task of tasks) {
       if (task.status === 'pending' || task.status === 'processing') {
         try {
           const result = await checkTaskStatus(task.id);
           if (result.status !== task.status) {
+            const oldStatus = task.status;
             task.status = result.status;
             task.result = result.result;
             task.error = result.error;
             updated = true;
+            
+            // 统计新完成/失败的任务
+            if (result.status === 'completed') newlyCompleted++;
+            if (result.status === 'failed') newlyFailed++;
           }
         } catch (err) {
           console.error('Poll error:', err);
@@ -1066,6 +1099,20 @@
       savePendingTasks(tasks);
       renderPendingTasksBadge();
       renderPendingTasksList();
+
+      // 显示完成通知
+      if (newlyCompleted > 0) {
+        const msg = currentLang === 'zh'
+          ? `✅ ${newlyCompleted} 张照片识别完成！`
+          : `✅ ${newlyCompleted} photo(s) ready!`;
+        showToast(msg, 3000, 'success');
+      }
+      if (newlyFailed > 0) {
+        const msg = currentLang === 'zh'
+          ? `❌ ${newlyFailed} 张照片识别失败`
+          : `❌ ${newlyFailed} photo(s) failed`;
+        showToast(msg, 3000);
+      }
     }
   }
 
@@ -1680,6 +1727,17 @@
 
     // pending tasks button
     $('#pendingBtn')?.addEventListener('click', () => {
+      renderPendingTasksList();
+      setSheetOpen($('#pendingSheet'), true);
+    });
+
+    // pending banner click
+    $('#pendingBanner')?.addEventListener('click', () => {
+      renderPendingTasksList();
+      setSheetOpen($('#pendingSheet'), true);
+    });
+    $('#pendingBannerBtn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
       renderPendingTasksList();
       setSheetOpen($('#pendingSheet'), true);
     });
@@ -2485,7 +2543,7 @@
   }
 
   // Toast 提示
-  function showToast(msg, duration = 2000) {
+  function showToast(msg, duration = 2000, type = '') {
     let toast = document.getElementById('toast');
     if (!toast) {
       toast = document.createElement('div');
@@ -2493,6 +2551,7 @@
       toast.style.cssText = 'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.8);color:#fff;padding:12px 24px;border-radius:8px;z-index:9999;transition:opacity 0.3s;';
       document.body.appendChild(toast);
     }
+    toast.className = type; // 'success' for green background
     toast.textContent = msg;
     toast.style.opacity = '1';
     setTimeout(() => { toast.style.opacity = '0'; }, duration);

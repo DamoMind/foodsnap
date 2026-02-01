@@ -37,6 +37,15 @@
   </header>
 
   <main class="container">
+    <!-- 待处理任务横幅 -->
+    <div class="pending-banner" id="pendingBanner" hidden>
+      <div class="pending-banner__icon">📸</div>
+      <div class="pending-banner__text">
+        <span id="pendingBannerText">有照片正在识别中...</span>
+      </div>
+      <button class="pending-banner__btn" id="pendingBannerBtn">查看 →</button>
+    </div>
+
     <!-- 目标/进度 -->
     <section class="card">
       <div class="card__header">
@@ -185,8 +194,10 @@
                 <option value="snack" data-i18n="snack">加餐</option>
               </select>
             </div>
-            <button class="btn btn--primary" id="analyzeBtn" data-i18n="startAnalyze">开始识别</button>
-            <button class="btn btn--ghost" id="analyzeAsyncBtn" title="后台处理，稍后查看结果">⏳ 后台处理</button>
+            <div class="analyze-btns">
+              <button class="btn btn--primary" id="analyzeBtn">🚀 立即识别</button>
+              <button class="btn btn--outline" id="analyzeAsyncBtn">⏳ 稍后处理</button>
+            </div>
           </div>
         </div>
 
