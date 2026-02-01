@@ -399,7 +399,8 @@ button, input, select{font:inherit}
   background: rgba(255,255,255,.03);
 }
 .food-item__top{display:flex; justify-content:space-between; gap:10px; align-items:flex-start}
-.food-item__name{font-weight:800}
+.food-item__name{font-weight:800;cursor:pointer;border-bottom:1px dashed var(--muted);padding-bottom:1px}
+.food-item__name:hover{color:var(--accent);border-bottom-color:var(--accent)}
 .food-item__sub{color:var(--muted); font-size:12px; margin-top:4px}
 .food-item__kcal{white-space:nowrap; text-align:right}
 .food-item__nutrition{display:flex; gap:12px; margin-top:8px; font-size:13px}

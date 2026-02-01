@@ -1,90 +1,8 @@
 /* Mobile H5 MVP: 拍照/上传 ->（模拟/可接入）识别 -> 份量校正 -> 保存到今日 -> 今日进度/建议 -> 周统计图
    数据存储：localStorage
    支持中英文切换
-   
-   @version 1.1.0
-   @changelog
-   - 添加网络请求重试机制
-   - 添加简单内存缓存
-   - 优化日期格式化性能
-   - 改进加载状态显示
 */
 (() => {
-  'use strict';
-  
-  // ====== 性能优化：简单内存缓存 ======
-  const _cache = new Map();
-  const CACHE_TTL = 60000; // 1 分钟缓存
-  
-  function getCached(key) {
-    const item = _cache.get(key);
-    if (!item) return null;
-    if (Date.now() > item.expiry) {
-      _cache.delete(key);
-      return null;
-    }
-    return item.value;
-  }
-  
-  function setCache(key, value, ttl = CACHE_TTL) {
-    _cache.set(key, { value, expiry: Date.now() + ttl });
-  }
-  
-  function clearCache(keyPrefix) {
-    if (!keyPrefix) {
-      _cache.clear();
-      return;
-    }
-    for (const key of _cache.keys()) {
-      if (key.startsWith(keyPrefix)) _cache.delete(key);
-    }
-  }
-  
-  // ====== 日期格式化工具 ======
-  const DateUtils = {
-    // 缓存 DateTimeFormat 实例以提高性能
-    _formatters: {},
-    
-    getFormatter(locale, options) {
-      const key = `${locale}-${JSON.stringify(options)}`;
-      if (!this._formatters[key]) {
-        this._formatters[key] = new Intl.DateTimeFormat(locale, options);
-      }
-      return this._formatters[key];
-    },
-    
-    formatDate(date, locale = 'zh-CN', style = 'short') {
-      const options = style === 'short' 
-        ? { month: 'short', day: 'numeric' }
-        : { year: 'numeric', month: 'long', day: 'numeric' };
-      return this.getFormatter(locale, options).format(date instanceof Date ? date : new Date(date));
-    },
-    
-    formatTime(date, locale = 'zh-CN') {
-      return this.getFormatter(locale, { hour: '2-digit', minute: '2-digit' })
-        .format(date instanceof Date ? date : new Date(date));
-    },
-    
-    // 相对时间（如"3分钟前"）
-    relativeTime(date, locale = 'zh-CN') {
-      const now = Date.now();
-      const then = date instanceof Date ? date.getTime() : new Date(date).getTime();
-      const diffMs = now - then;
-      const diffMin = Math.floor(diffMs / 60000);
-      
-      if (diffMin < 1) return locale === 'zh' ? '刚刚' : locale === 'ja' ? 'たった今' : 'just now';
-      if (diffMin < 60) return locale === 'zh' ? `${diffMin}分钟前` : locale === 'ja' ? `${diffMin}分前` : `${diffMin}m ago`;
-      
-      const diffHour = Math.floor(diffMin / 60);
-      if (diffHour < 24) return locale === 'zh' ? `${diffHour}小时前` : locale === 'ja' ? `${diffHour}時間前` : `${diffHour}h ago`;
-      
-      const diffDay = Math.floor(diffHour / 24);
-      if (diffDay < 7) return locale === 'zh' ? `${diffDay}天前` : locale === 'ja' ? `${diffDay}日前` : `${diffDay}d ago`;
-      
-      return this.formatDate(date, locale);
-    }
-  };
-
   // GA4 事件追踪
   function gtmEvent(eventName, params = {}) {
     if (typeof gtag === 'function') {
@@ -972,39 +890,6 @@
     });
   }
 
-  // ====== 网络请求工具函数 ======
-  
-  /** 带重试的 fetch 请求 */
-  async function fetchWithRetry(url, options = {}, maxRetries = 2, retryDelay = 1000) {
-    let lastError;
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        const response = await fetch(url, options);
-        if (!response.ok) {
-          // 4xx 错误不重试
-          if (response.status >= 400 && response.status < 500) {
-            const err = await response.json().catch(() => ({}));
-            throw new Error(err.error?.message || err.detail || `HTTP ${response.status}`);
-          }
-          // 5xx 错误可以重试
-          throw new Error(`HTTP ${response.status}`);
-        }
-        return response;
-      } catch (err) {
-        lastError = err;
-        console.warn(`Request attempt ${attempt + 1} failed:`, err.message);
-        
-        // 网络错误或服务器错误可以重试
-        if (attempt < maxRetries && (err.name === 'TypeError' || err.message.startsWith('HTTP 5'))) {
-          await sleep(retryDelay * (attempt + 1)); // 指数退避
-          continue;
-        }
-        break;
-      }
-    }
-    throw lastError;
-  }
-
   // ====== AI 识别（调用后端 /api/analyze） ======
   async function analyzeFoodImage({ dataUrl, blob }) {
     // 如果有 blob，使用它；否则从 dataUrl 转换
@@ -1018,27 +903,27 @@
     formData.append('file', imageBlob, 'food.jpg');
 
     try {
-      const response = await fetchWithRetry('/api/analyze', {
+      const response = await fetch('/api/analyze', {
         method: 'POST',
         headers: {
           ...getAuthHeaders(),
           'X-Lang': currentLang || 'zh'
         },
         body: formData
-      }, 2, 1500); // 最多重试2次，延迟1.5秒
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || `HTTP ${response.status}`);
+      }
 
       const result = await response.json();
       console.log('AI 识别成功，返回数据:', result);
-      
-      // 检查是否有 API 错误
-      if (result.error) {
-        throw new Error(result.error.message || result.error);
-      }
+      // result = { ai: {...}, meal_preview: { items, totals, warnings } }
 
       // 转换后端返回的 items 到前端格式
-      // 支持新格式 (successResponse) 和旧格式
-      const mealPreview = result.data?.meal_preview || result.meal_preview;
-      const items = (mealPreview?.items || []).map((it) => {
+      // 后端返回: { kcal, protein_g, carbs_g, fat_g } 直接在 item 上
+      const items = (result.meal_preview?.items || []).map((it) => {
         const weight = it.weight_g || 100;
         const kcal = it.kcal || 0;
         const protein = it.protein_g || 0;
@@ -1066,19 +951,12 @@
 
       return {
         items,
-        warnings: mealPreview?.warnings || []
+        warnings: result.meal_preview?.warnings || []
       };
     } catch (err) {
       console.error('AI 识别失败:', err);
-      
-      // 用更友好的 Toast 替代 alert
-      const errorMsg = currentLang === 'zh' 
-        ? `AI 识别失败: ${err.message}` 
-        : currentLang === 'ja'
-        ? `AI認識に失敗: ${err.message}`
-        : `AI recognition failed: ${err.message}`;
-      showToast(errorMsg, 3000);
-      
+      console.error('错误详情:', err.message, err.stack);
+      alert('AI 识别出错: ' + err.message + '\n将使用模拟数据');
       // 降级到本地模拟
       return fallbackLocalAnalysis();
     }
@@ -1204,98 +1082,6 @@
       toast.style.animation = 'toastOut 0.3s ease forwards';
       setTimeout(() => toast.remove(), 300);
     }, duration);
-  }
-
-  // ====== 全局加载指示器 ======
-  let _loadingCount = 0;
-  let _loadingEl = null;
-  
-  function showLoading(message) {
-    _loadingCount++;
-    if (_loadingCount > 1 && _loadingEl) {
-      // 更新消息
-      const msgEl = _loadingEl.querySelector('.loading-message');
-      if (msgEl && message) msgEl.textContent = message;
-      return;
-    }
-    
-    _loadingEl = document.createElement('div');
-    _loadingEl.className = 'global-loading';
-    _loadingEl.innerHTML = `
-      <div class="loading-backdrop"></div>
-      <div class="loading-content">
-        <div class="loading-spinner"></div>
-        <div class="loading-message">${message || ''}</div>
-      </div>
-    `;
-    _loadingEl.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      z-index: 10000;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    `;
-    
-    // 添加样式
-    if (!document.getElementById('loading-styles')) {
-      const style = document.createElement('style');
-      style.id = 'loading-styles';
-      style.textContent = `
-        .global-loading .loading-backdrop {
-          position: absolute;
-          top: 0; left: 0; right: 0; bottom: 0;
-          background: rgba(0,0,0,0.4);
-        }
-        .global-loading .loading-content {
-          position: relative;
-          background: #fff;
-          border-radius: 16px;
-          padding: 24px 32px;
-          text-align: center;
-          box-shadow: 0 8px 32px rgba(0,0,0,0.2);
-        }
-        .global-loading .loading-spinner {
-          width: 40px;
-          height: 40px;
-          margin: 0 auto 12px;
-          border: 4px solid #e5e7eb;
-          border-top-color: #0ea5e9;
-          border-radius: 50%;
-          animation: spin 0.8s linear infinite;
-        }
-        .global-loading .loading-message {
-          color: #374151;
-          font-size: 14px;
-          font-weight: 500;
-        }
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-      `;
-      document.head.appendChild(style);
-    }
-    
-    document.body.appendChild(_loadingEl);
-  }
-  
-  function hideLoading() {
-    _loadingCount = Math.max(0, _loadingCount - 1);
-    if (_loadingCount === 0 && _loadingEl) {
-      _loadingEl.remove();
-      _loadingEl = null;
-    }
-  }
-  
-  function forceHideLoading() {
-    _loadingCount = 0;
-    if (_loadingEl) {
-      _loadingEl.remove();
-      _loadingEl = null;
-    }
   }
 
   // ====== UI helpers ======
@@ -2450,7 +2236,7 @@
       el.innerHTML = `
         <div class="food-item__top">
           <div>
-            <div class="food-item__name">${escapeHtml(it.name)}</div>
+            <div class="food-item__name" data-edit-name="${it.id}" title="${t('clickToEdit') || '点击修改'}">${escapeHtml(it.name)}</div>
             <div class="food-item__sub">
               ${confLabel} ${(it.confidence * 100).toFixed(0)}% · ${sourceLabel} · ${per100Label} ${round0(it.per100.kcal)}kcal
             </div>
@@ -2532,12 +2318,77 @@
       }
     };
 
-    wrap.onclick = (e) => {
+    wrap.onclick = async (e) => {
+      // Handle delete button
       const del = e.target.closest('button[data-del]');
-      if (!del) return;
-      const id = del.dataset.del;
-      meal.items = meal.items.filter(x => x.id !== id);
-      renderResultSheet(meal);
+      if (del) {
+        const id = del.dataset.del;
+        meal.items = meal.items.filter(x => x.id !== id);
+        renderResultSheet(meal);
+        return;
+      }
+
+      // Handle food name click for inline edit
+      const nameEl = e.target.closest('[data-edit-name]');
+      if (nameEl && !nameEl.querySelector('input')) {
+        const id = nameEl.dataset.editName;
+        const it = meal.items.find(x => x.id === id);
+        if (!it) return;
+
+        const originalName = it.name;
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'food-name-input';
+        input.value = it.name;
+        input.style.cssText = 'width:100%;font-size:inherit;font-weight:inherit;border:1px solid var(--accent);border-radius:4px;padding:2px 6px;';
+        
+        nameEl.textContent = '';
+        nameEl.appendChild(input);
+        input.focus();
+        input.select();
+
+        const finishEdit = async () => {
+          const newName = input.value.trim();
+          if (!newName || newName === originalName) {
+            nameEl.textContent = originalName;
+            return;
+          }
+
+          // Update name and show loading
+          it.name = newName;
+          it.manual = true;
+          nameEl.textContent = newName + ' ⏳';
+
+          // Lookup nutrition for new name
+          try {
+            const res = await fetch('/api/nutrition/lookup', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+              body: JSON.stringify({ name: newName, lang: currentLang || 'zh' })
+            });
+            if (res.ok) {
+              const data = await res.json();
+              it.per100 = {
+                kcal: data.per100.kcal,
+                p: data.per100.protein_g,
+                c: data.per100.carbs_g,
+                f: data.per100.fat_g
+              };
+              recalcItem(it);
+            }
+          } catch (err) {
+            console.error('Nutrition lookup failed:', err);
+          }
+
+          renderResultSheet(meal);
+        };
+
+        input.onblur = finishEdit;
+        input.onkeydown = (ev) => {
+          if (ev.key === 'Enter') { ev.preventDefault(); input.blur(); }
+          if (ev.key === 'Escape') { nameEl.textContent = originalName; }
+        };
+      }
     };
   }
 

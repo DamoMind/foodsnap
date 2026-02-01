@@ -1530,6 +1530,90 @@ app.post('/api/analyze', async (c) => {
   }
 });
 
+// Lookup nutrition by food name
+app.post('/api/nutrition/lookup', async (c) => {
+  const AI_GATEWAY_URL = c.env.AI_GATEWAY_URL || 'https://edge-ai-gateway.duizhan.app';
+  const AI_GATEWAY_KEY = c.env.AI_GATEWAY_KEY;
+
+  try {
+    const body = await c.req.json() as { name: string; lang?: string };
+    const { name, lang = 'zh' } = body;
+
+    if (!name || typeof name !== 'string' || name.trim().length === 0) {
+      return c.json({ error: 'Food name is required' }, 400);
+    }
+
+    const foodName = name.trim().slice(0, 100);
+
+    const langInstructions: Record<string, string> = {
+      zh: '用中文回复',
+      en: 'Reply in English',
+      ja: '日本語で回答してください'
+    };
+    const langHint = langInstructions[lang] || langInstructions.zh;
+
+    const prompt = `你是营养学专家。请提供 "${foodName}" 每100克的营养数据。${langHint}
+
+返回严格JSON格式:
+{
+  "name": "${foodName}",
+  "kcal": 热量(数字),
+  "protein_g": 蛋白质克数(数字),
+  "carbs_g": 碳水克数(数字),
+  "fat_g": 脂肪克数(数字)
+}
+
+只返回JSON，不要其他文字。如果不确定，使用合理估算值。`;
+
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (AI_GATEWAY_KEY) {
+      headers['Authorization'] = `Bearer ${AI_GATEWAY_KEY}`;
+    }
+
+    const response = await fetch(`${AI_GATEWAY_URL}/v1/chat/completions`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 200
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('AI Gateway error:', errorText);
+      return c.json({ error: 'AI service error' }, 500);
+    }
+
+    const aiResult = await response.json() as any;
+    const content = aiResult.choices?.[0]?.message?.content || '';
+
+    let parsed;
+    try {
+      const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, content];
+      parsed = JSON.parse(jsonMatch[1].trim());
+    } catch (e) {
+      console.error('Failed to parse AI response:', content);
+      return c.json({ error: 'Failed to parse response', raw: content }, 500);
+    }
+
+    return c.json({
+      name: parsed.name || foodName,
+      per100: {
+        kcal: Number(parsed.kcal) || 100,
+        protein_g: Number(parsed.protein_g) || 5,
+        carbs_g: Number(parsed.carbs_g) || 15,
+        fat_g: Number(parsed.fat_g) || 5
+      }
+    });
+
+  } catch (error: any) {
+    console.error('Nutrition lookup error:', error);
+    return c.json({ error: 'Lookup failed', message: error.message }, 500);
+  }
+});
+
 // Exercise screenshot recognition
 app.post('/api/analyze-exercise', async (c) => {
   const AI_GATEWAY_URL = c.env.AI_GATEWAY_URL || 'https://edge-ai-gateway.duizhan.app';
