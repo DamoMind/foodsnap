@@ -1159,6 +1159,7 @@
     }
 
     container.innerHTML = tasks.map(task => {
+      const typeIcon = task.type === 'exercise' ? '🏃' : '🍽️';
       const statusText = {
         pending: '⏳ 排队中',
         processing: '🔄 识别中',
@@ -1170,16 +1171,17 @@
       
       let actionBtns = '';
       if (task.status === 'completed') {
-        actionBtns = `<button class="small-btn primary" data-view-task="${task.id}">${t('view') || '查看'}</button>`;
+        const btnText = task.type === 'exercise' ? '填入' : '查看';
+        actionBtns = `<button class="small-btn primary" data-view-task="${task.id}">${btnText}</button>`;
       } else if (task.status === 'failed') {
-        actionBtns = `<button class="small-btn" data-retry-task="${task.id}">🔄 重试</button>`;
+        actionBtns = `<button class="small-btn" data-retry-task="${task.id}">🔄</button>`;
       }
 
       return `
         <div class="pending-task ${task.status}" data-task-id="${task.id}">
           <img src="${task.thumbnail}" class="task-thumb" alt="">
           <div class="task-info">
-            <div class="task-status">${statusText}</div>
+            <div class="task-status">${typeIcon} ${statusText}</div>
             <div class="task-time">${time}</div>
             ${task.error ? `<div class="task-error">${task.error}</div>` : ''}
           </div>
@@ -1256,6 +1258,21 @@
 
   // 打开已完成任务的结果
   function openTaskResult(task) {
+    // 处理运动类型
+    if (task.type === 'exercise' || task.result?.type === 'exercise') {
+      const r = task.result;
+      if (r.exercise_kcal > 0) $('#exerciseKcalInput').value = r.exercise_kcal;
+      if (r.steps > 0) $('#stepsInput').value = r.steps;
+      if (r.active_minutes > 0) $('#activeMinutesInput').value = r.active_minutes;
+      
+      setSheetOpen($('#pendingSheet'), false);
+      setSheetOpen($('#exerciseSheet'), true);
+      showToast(r.summary || `${r.exercise_kcal} kcal, ${r.steps} 步`, 3000, 'success');
+      removePendingTask(task.id);
+      return;
+    }
+
+    // 处理食物类型
     if (!task.result?.meal_preview) return;
 
     const items = (task.result.meal_preview.items || []).map((it) => {
@@ -2012,82 +2029,53 @@
       setSheetOpen($('#exerciseSheet'), true);
     });
 
-    // exercise screenshot recognition
+    // exercise screenshot recognition - async mode
     $('#exerciseScreenshotInput')?.addEventListener('change', async (e) => {
       const file = e.target.files?.[0];
       if (!file) return;
 
-      const recognizingEl = $('#exerciseRecognizing');
-      recognizingEl.hidden = false;
-
       try {
         // Compress image first
         const compressed = await compressImage(file, 1280, 0.8);
+        const thumbnail = compressed.dataUrl;
         
         const formData = new FormData();
         formData.append('file', compressed.blob, 'exercise.jpg');
         formData.append('lang', currentLang || 'zh');
 
-        const response = await fetch('/api/analyze-exercise', {
+        // Submit async
+        const response = await fetch('/api/analyze-exercise/submit', {
           method: 'POST',
           headers: getAuthHeaders(),
           body: formData
         });
 
         if (!response.ok) {
-          throw new Error('Recognition failed');
+          throw new Error('Submit failed');
         }
 
-        const result = await response.json();
-        console.log('Exercise recognition result:', result);
-
-        // Show confirmation dialog with summary
-        const summary = result.summary || `${result.exercise_kcal} kcal, ${result.steps} 步, ${result.active_minutes} 分钟`;
-        const details = [];
-        if (result.exercise_kcal > 0) details.push(`${result.exercise_kcal} kcal`);
-        if (result.steps > 0) details.push(`${result.steps} ${t('steps')}`);
-        if (result.active_minutes > 0) details.push(`${result.active_minutes} min`);
+        const res = await response.json();
         
-        if (details.length === 0) {
-          showToast(t('exerciseRecognizeFailed'));
-          return;
+        if (res.success && res.task_id) {
+          // Add to pending tasks with type='exercise'
+          addPendingTask({
+            id: res.task_id,
+            type: 'exercise',
+            status: 'pending',
+            thumbnail: thumbnail,
+            createdAt: Date.now()
+          });
+
+          showToast(currentLang === 'zh' ? '✅ 已提交，稍后查看结果' : 'Submitted! Check pending tasks.', 2000, 'success');
+          startPolling();
         }
 
-        // Show confirmation with summary
-        const confirmMsg = currentLang === 'zh' 
-          ? `识别结果：\n${summary}\n\n确认使用这些数据吗？`
-          : currentLang === 'ja'
-          ? `認識結果：\n${summary}\n\nこのデータを使用しますか？`
-          : `Recognition result:\n${summary}\n\nUse this data?`;
-        
-        if (!confirm(confirmMsg)) {
-          showToast(currentLang === 'zh' ? '已取消' : currentLang === 'ja' ? 'キャンセルしました' : 'Cancelled');
-          return;
-        }
-
-        // Fill in the form after confirmation
-        if (result.exercise_kcal > 0) {
-          $('#exerciseKcalInput').value = result.exercise_kcal;
-        }
-        if (result.steps > 0) {
-          $('#stepsInput').value = result.steps;
-        }
-        if (result.active_minutes > 0) {
-          $('#activeMinutesInput').value = result.active_minutes;
-        }
-
-        showToast(`✅ ${t('exerciseRecognized')}: ${details.join(', ')}`)
-
-        gtmEvent('exercise_screenshot_recognized', { 
-          kcal: result.exercise_kcal,
-          source: result.source_app 
-        });
+        gtmEvent('exercise_screenshot_submitted');
 
       } catch (err) {
         console.error('Exercise recognition error:', err);
         showToast(t('exerciseRecognizeFailed'));
       } finally {
-        recognizingEl.hidden = true;
         e.target.value = ''; // Reset file input
       }
     });

@@ -1973,6 +1973,113 @@ app.post('/api/analyze-exercise', async (c) => {
   }
 });
 
+// Async exercise recognition
+app.post('/api/analyze-exercise/submit', async (c) => {
+  const AI_GATEWAY_URL = c.env.AI_GATEWAY_URL || 'https://edge-ai-gateway.duizhan.app';
+  const AI_GATEWAY_KEY = c.env.AI_GATEWAY_KEY;
+
+  try {
+    const formData = await c.req.formData();
+    const imageFile = (formData.get('image') || formData.get('file')) as File | null;
+    const lang = (formData.get('lang') as string) || 'zh';
+
+    if (!imageFile) {
+      return c.json({ error: 'No image provided' }, 400);
+    }
+
+    const authHeader = c.req.header('Authorization');
+    let userId: string | null = null;
+    if (authHeader?.startsWith('Bearer ')) {
+      userId = await verifyJwt(authHeader.slice(7), c.env);
+    }
+
+    const arrayBuffer = await imageFile.arrayBuffer();
+    const uint8Array = new Uint8Array(arrayBuffer);
+    let binary = '';
+    const chunkSize = 8192;
+    for (let i = 0; i < uint8Array.length; i += chunkSize) {
+      const chunk = uint8Array.subarray(i, i + chunkSize);
+      binary += String.fromCharCode(...chunk);
+    }
+    const base64Image = btoa(binary);
+    const mimeType = imageFile.type || 'image/jpeg';
+    const taskId = crypto.randomUUID();
+
+    // Insert task with type='exercise'
+    await c.env.DB.prepare(
+      'INSERT INTO analyze_tasks (id, user_id, status, image_data, lang) VALUES (?, ?, ?, ?, ?)'
+    ).bind(taskId, userId, 'pending', `exercise:${base64Image}`, lang).run();
+
+    // Process in background
+    c.executionCtx.waitUntil(processExerciseTask(c.env, taskId, base64Image, mimeType, lang));
+
+    return c.json({ success: true, task_id: taskId, type: 'exercise' });
+
+  } catch (error: any) {
+    return c.json({ error: 'Submit failed', message: error.message }, 500);
+  }
+});
+
+async function processExerciseTask(env: Env, taskId: string, base64Image: string, mimeType: string, lang: string) {
+  const AI_GATEWAY_URL = env.AI_GATEWAY_URL || 'https://edge-ai-gateway.duizhan.app';
+  const AI_GATEWAY_KEY = env.AI_GATEWAY_KEY;
+
+  try {
+    await env.DB.prepare('UPDATE analyze_tasks SET status = ? WHERE id = ?').bind('processing', taskId).run();
+
+    const prompt = `你是运动数据识别专家。分析截图中的运动数据。
+识别：运动消耗卡路里（Activity Rings的Move值优先）、步数、运动分钟数。
+返回JSON: {"exercise_kcal":数字,"steps":数字,"active_minutes":数字,"summary":"一句话总结"}`;
+
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (AI_GATEWAY_KEY) headers['Authorization'] = `Bearer ${AI_GATEWAY_KEY}`;
+
+    const response = await fetch(`${AI_GATEWAY_URL}/v1/chat/completions`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'text', text: prompt },
+            { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64Image}` } }
+          ]
+        }],
+        max_tokens: 500
+      })
+    });
+
+    if (!response.ok) throw new Error('AI service error');
+
+    const aiResult = await response.json() as any;
+    const content = aiResult.choices?.[0]?.message?.content || '';
+    
+    let parsed;
+    try {
+      const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, content];
+      parsed = JSON.parse(jsonMatch[1].trim());
+    } catch {
+      throw new Error('Failed to parse response');
+    }
+
+    const result = {
+      type: 'exercise',
+      exercise_kcal: Math.round(parsed.exercise_kcal || 0),
+      steps: Math.round(parsed.steps || 0),
+      active_minutes: Math.round(parsed.active_minutes || 0),
+      summary: parsed.summary || null
+    };
+
+    await env.DB.prepare('UPDATE analyze_tasks SET status = ?, result = ?, image_data = NULL, completed_at = datetime(\'now\') WHERE id = ?')
+      .bind('completed', JSON.stringify(result), taskId).run();
+
+  } catch (error: any) {
+    await env.DB.prepare('UPDATE analyze_tasks SET status = ?, error = ?, completed_at = datetime(\'now\') WHERE id = ?')
+      .bind('failed', error.message, taskId).run();
+  }
+}
+
 // Serve static files
 app.get('/*', serveStatic({ root: './' }));
 
