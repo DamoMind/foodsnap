@@ -1405,8 +1405,23 @@ ${supplementCompliance.length > 0 ? supplementCompliance.map(s => `- ${s.name}: 
 
 // Prompts for different task types
 const PROMPTS = {
-  food: (langHint: string) => `你是食物识别专家。${langHint}
-识别图中所有食物，估算重量，提供每100g营养数据。
+  food: (langHint: string) => `你是食物识别和营养分析专家。${langHint}
+
+**识别要求**:
+1. 识别图中所有食物/饮品，估算重量(g)或体积(ml)
+2. 提供准确的每100g/ml营养数据
+
+**饮品营养参考（重要！）**:
+- 纯茶/黑咖啡/水: ~0-2kcal, 蛋白0g, 碳水0g, 脂肪0g
+- 奶茶/拿铁: ~40-60kcal（含奶和糖）
+- 可乐/果汁: ~40-50kcal（高糖）
+- 牛奶: ~60kcal, 蛋白3g, 碳水5g, 脂肪3g
+
+**常见食物参考**:
+- 米饭(熟): 116kcal, P2.6g, C26g, F0.3g
+- 鸡胸肉: 165kcal, P31g, C0g, F3.6g
+- 鸡蛋: 155kcal, P13g, C1g, F11g
+
 返回JSON: {"foods":[{"name":"名称","weight_g":重量,"confidence":0-1,"nutrition_per_100g":{"kcal":热量,"protein_g":蛋白质,"carbs_g":碳水,"fat_g":脂肪}}],"meal_type":"breakfast/lunch/dinner/snack"}`,
 
   exercise: (langHint: string) => `你是运动数据识别专家。${langHint}
@@ -1630,19 +1645,31 @@ app.post('/api/analyze', async (c) => {
 4. 提供每100g的营养数据
 
 **营养参考数据**:
-- 米饭(熟) 100g: 116kcal, 2.6g蛋白质, 25.9g碳水, 0.3g脂肪
-- 鸡胸肉 100g: 165kcal, 31g蛋白质, 0g碳水, 3.6g脂肪
-- 红烧肉 100g: 500kcal, 15g蛋白质, 5g碳水, 45g脂肪
-- 清蒸鱼 100g: 110kcal, 20g蛋白质, 0g碳水, 3g脂肪
-- 炒青菜 100g: 50kcal, 2g蛋白质, 5g碳水, 3g脂肪
-- 拉面(带汤) 100g: 89kcal, 5g蛋白质, 13g碳水, 2g脂肪
-- 寿司(握寿司) 100g: 150kcal, 6g蛋白质, 22g碳水, 4g脂肪
-- 生鱼片 100g: 127kcal, 26g蛋白质, 0g碳水, 2g脂肪
-- 天妇罗 100g: 200kcal, 5g蛋白质, 20g碳水, 11g脂肪
-- 饺子 100g: 220kcal, 8g蛋白质, 25g碳水, 10g脂肪
-- 面包 100g: 265kcal, 9g蛋白质, 49g碳水, 3g脂肪
-- 牛排 100g: 271kcal, 26g蛋白质, 0g碳水, 18g脂肪
-- 沙拉(无酱) 100g: 20kcal, 1g蛋白质, 4g碳水, 0.2g脂肪
+
+饮品（每100ml，重要！）:
+- 纯茶/绿茶/红茶/乌龙茶(无糖): 1kcal, 0g蛋白质, 0g碳水, 0g脂肪
+- 黑咖啡(无糖无奶): 2kcal, 0g蛋白质, 0g碳水, 0g脂肪
+- 水/矿泉水/苏打水: 0kcal, 0g蛋白质, 0g碳水, 0g脂肪
+- 牛奶: 60kcal, 3g蛋白质, 5g碳水, 3g脂肪
+- 奶茶/拿铁: 50kcal, 2g蛋白质, 6g碳水, 2g脂肪
+- 可乐/雪碧: 42kcal, 0g蛋白质, 11g碳水, 0g脂肪
+- 橙汁: 45kcal, 0.7g蛋白质, 10g碳水, 0g脂肪
+
+主食（每100g）:
+- 米饭(熟): 116kcal, 2.6g蛋白质, 26g碳水, 0.3g脂肪
+- 面条(熟): 137kcal, 5g蛋白质, 25g碳水, 2g脂肪
+- 面包: 265kcal, 9g蛋白质, 49g碳水, 3g脂肪
+
+肉类（每100g）:
+- 鸡胸肉: 165kcal, 31g蛋白质, 0g碳水, 3.6g脂肪
+- 红烧肉: 500kcal, 15g蛋白质, 5g碳水, 45g脂肪
+- 牛排: 271kcal, 26g蛋白质, 0g碳水, 18g脂肪
+- 清蒸鱼: 110kcal, 20g蛋白质, 0g碳水, 3g脂肪
+
+其他（每100g）:
+- 鸡蛋: 155kcal, 13g蛋白质, 1g碳水, 11g脂肪
+- 炒青菜: 50kcal, 2g蛋白质, 5g碳水, 3g脂肪
+- 沙拉(无酱): 20kcal, 1g蛋白质, 4g碳水, 0.2g脂肪
 
 返回严格JSON格式:
 {
@@ -1760,18 +1787,19 @@ app.post('/api/nutrition/lookup', async (c) => {
     };
     const langHint = langInstructions[lang] || langInstructions.zh;
 
-    const prompt = `你是营养学专家。请提供 "${foodName}" 每100克的营养数据。${langHint}
+    const prompt = `你是营养学专家。请提供 "${foodName}" 每100g/ml的营养数据。${langHint}
 
-返回严格JSON格式:
-{
-  "name": "${foodName}",
-  "kcal": 热量(数字),
-  "protein_g": 蛋白质克数(数字),
-  "carbs_g": 碳水克数(数字),
-  "fat_g": 脂肪克数(数字)
-}
+**饮品参考（每100ml）**:
+- 茶/绿茶/红茶(无糖): 1kcal, P0g, C0g, F0g
+- 黑咖啡(无糖): 2kcal, P0g, C0g, F0g
+- 水: 0kcal
+- 牛奶: 60kcal, P3g, C5g, F3g
+- 奶茶: 50kcal, P2g, C6g, F2g
 
-只返回JSON，不要其他文字。如果不确定，使用合理估算值。`;
+返回JSON:
+{"name":"${foodName}","kcal":数字,"protein_g":数字,"carbs_g":数字,"fat_g":数字}
+
+只返回JSON。`;
 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (AI_GATEWAY_KEY) {
